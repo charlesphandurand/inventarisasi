@@ -1,0 +1,27 @@
+<?php
+
+namespace Database\Factories;
+
+use Illuminate\Database\Eloquent\Factories\Factory;
+
+/**
+ * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\Aset>
+ */
+class AsetFactory extends Factory
+{
+    /**
+     * Define the model's default state.
+     *
+     * @return array<string, mixed>
+     */
+    public function definition(): array
+    {
+        return [
+            'nama_barang' => $this->faker->word(),
+            'jumlah_barang' => $this->faker->numberBetween(1, 100),
+            'sisa_barang' => $this->faker->numberBetween(1, 100),
+            'lokasi' => $this->faker->city(),
+            'atas_nama' => $this->faker->name(),
+        ];
+    }
+}
