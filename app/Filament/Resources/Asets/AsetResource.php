@@ -10,6 +10,7 @@ use App\Filament\Resources\Asets\Tables\AsetsTable;
 use Filament\Forms\Components\MarkdownEditor;
 use App\Models\Aset;
 use BackedEnum;
+use UnitEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
@@ -21,6 +22,7 @@ class AsetResource extends Resource
     
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
 
+    protected static UnitEnum|string|null $navigationGroup = 'Manajemen Aset';  
     protected static ?string $recordTitleAttribute = 'nama_barang'; // Perbaikan di sini (search publik)
 
     public static function form(Schema $schema): Schema

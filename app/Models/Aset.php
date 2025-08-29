@@ -16,4 +16,9 @@ class Aset extends Model
         'atas_nama',
         'keterangan',
     ];
+
+    public function pengajuanPinjaman()
+    {
+        return $this->hasMany(PengajuanPinjaman::class);
+    }
 }
