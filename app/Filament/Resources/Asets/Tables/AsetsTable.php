@@ -29,6 +29,9 @@ class AsetsTable
                 TextColumn::make('lokasi')
                     ->sortable()
                     ->searchable(),
+                TextColumn::make('keterangan')
+                    ->sortable()
+                    ->searchable(),
                 TextColumn::make('created_at')
                     ->dateTime()
                     ->sortable()

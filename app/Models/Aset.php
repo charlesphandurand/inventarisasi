@@ -14,5 +14,6 @@ class Aset extends Model
         'sisa_barang',
         'lokasi',
         'atas_nama',
+        'keterangan',
     ];
 }

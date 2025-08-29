@@ -7,6 +7,7 @@ use App\Filament\Resources\Asets\Pages\EditAset;
 use App\Filament\Resources\Asets\Pages\ListAsets;
 use App\Filament\Resources\Asets\Schemas\AsetForm;
 use App\Filament\Resources\Asets\Tables\AsetsTable;
+use Filament\Forms\Components\MarkdownEditor;
 use App\Models\Aset;
 use BackedEnum;
 use Filament\Resources\Resource;
@@ -17,7 +18,7 @@ use Filament\Tables\Table;
 class AsetResource extends Resource
 {
     protected static ?string $model = Aset::class;
-
+    
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
 
     protected static ?string $recordTitleAttribute = 'nama_barang'; // Perbaikan di sini (search publik)

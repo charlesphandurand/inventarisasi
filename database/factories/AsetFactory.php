@@ -22,6 +22,7 @@ class AsetFactory extends Factory
             'sisa_barang' => $this->faker->numberBetween(1, 100),
             'lokasi' => $this->faker->city(),
             'atas_nama' => $this->faker->name(),
+            'keterangan' => $this->faker->sentence(),
         ];
     }
 }

@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Asets\Schemas;
 
+use Filament\Forms\Components\Textarea; // Pastikan Anda mengimpor ini
 use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Schema;
 
@@ -25,6 +26,12 @@ class AsetForm
                     ->required()
                     ->numeric()
                     ->default(0),
+                Textarea::make('keterangan')
+                    ->label('Keterangan')
+                    ->placeholder('Masukkan detail keterangan aset di sini...')
+                    ->cols(4)
+                    ->rows(4)
+                    ->maxLength(100),
             ]);
     }
 }
