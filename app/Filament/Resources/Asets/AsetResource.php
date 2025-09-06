@@ -15,6 +15,7 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Model;
 
 class AsetResource extends Resource
 {
@@ -23,7 +24,7 @@ class AsetResource extends Resource
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
 
     protected static UnitEnum|string|null $navigationGroup = 'Manajemen Aset';  
-    protected static ?string $recordTitleAttribute = 'nama_barang'; // Perbaikan di sini (search publik)
+    protected static ?string $recordTitleAttribute = 'nama_barang';
 
     public static function form(Schema $schema): Schema
     {
@@ -49,5 +50,25 @@ class AsetResource extends Resource
             'create' => CreateAset::route('/create'),
             'edit' => EditAset::route('/{record}/edit'),
         ];
+    }
+
+    public static function canViewAny(): bool
+    {
+        return auth()->user()->can('view asets');
+    }
+
+    public static function canCreate(): bool
+    {
+        return auth()->user()->can('create asets');
+    }
+
+    public static function canEdit(Model $record): bool
+    {
+        return auth()->user()->can('edit asets');
+    }
+
+    public static function canDelete(Model $record): bool
+    {
+        return auth()->user()->can('delete asets');
     }
 }

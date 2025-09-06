@@ -8,15 +8,20 @@ use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
-use Filament\Actions\DeleteAction; // <-- Add this import
+use Filament\Actions\DeleteAction;
 use Illuminate\Support\Facades\Auth;
 use Carbon\Carbon;
 use Filament\Notifications\Notification;
+use Filament\Tables\Filters\SelectFilter;
+use Filament\Tables\Filters\Filter;
 
 class PengajuanPinjamanTable
 {
     public static function configure(Table $table): Table
     {
+        $isAdmin = Auth::user()->hasRole('admin');
+        $currentUserId = Auth::id();
+
         return $table
             ->columns([
                 TextColumn::make('aset.nama_barang')
@@ -27,16 +32,6 @@ class PengajuanPinjamanTable
                 TextColumn::make('jumlah_pinjam')
                     ->label('Jumlah Pinjam')
                     ->numeric()
-                    ->sortable(),
-
-                TextColumn::make('tanggal_pengajuan')
-                    ->label('Tanggal Pengajuan')
-                    ->dateTime()
-                    ->sortable(),
-
-                TextColumn::make('tanggal_approval')
-                    ->label('Tanggal Approval')
-                    ->dateTime()
                     ->sortable(),
 
                 TextColumn::make('admin.name')
@@ -53,23 +48,31 @@ class PengajuanPinjamanTable
                     }),
                     
                 TextColumn::make('created_at')
-                    ->label('Dibuat Pada')
+                    ->label('Tanggal Pengajuan')
                     ->dateTime()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
+                    ->timezone('Asia/Makassar')
+                    ->sortable(),
 
                 TextColumn::make('updated_at')
-                    ->label('Diperbarui Pada')
+                    ->label('Tanggal Approval')
                     ->dateTime()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
+                    ->timezone('Asia/Makassar')
+                    ->sortable(),
+            ])
+            ->filters([
+                // Filter untuk user biasa agar hanya lihat pengajuan miliknya sendiri
+                Filter::make('my_pengajuan')
+                    ->label('Pengajuan Saya')
+                    ->query(fn ($query) => $isAdmin ? $query : $query->where('user_id', $currentUserId))
+                    ->visible(fn () => !$isAdmin), // Hanya muncul untuk user biasa
             ])
             ->actions([
+                // Hanya admin yang bisa setujui
                 Action::make('setujui')
                     ->label('Setujui')
                     ->icon('heroicon-o-check-circle')
                     ->color('success')
-                    ->visible(fn ($record) => $record->status === 'diajukan')
+                    ->visible(fn ($record) => $record->status === 'diajukan' && $isAdmin)
                     ->action(function ($record) {
                         $aset = $record->aset;
                         $jumlahPinjam = $record->jumlah_pinjam;
@@ -80,7 +83,7 @@ class PengajuanPinjamanTable
 
                             $record->update([
                                 'status' => 'disetujui',
-                                'tanggal_approval' => Carbon::now(),
+                                'tanggal_approval' => Carbon::now('Asia/Makassar'),
                                 'admin_id' => Auth::id(),
                             ]);
 
@@ -97,12 +100,18 @@ class PengajuanPinjamanTable
                                 ->send();
                         }
                     }),
-                EditAction::make(),
-                DeleteAction::make(),
+
+                // Admin bisa edit semua, user hanya bisa edit miliknya sendiri PENTING!!!!
+                EditAction::make()->visible(fn ($record) => $isAdmin || $record->user_id === $currentUserId),
+                // PENTING!!!!
+                
+                // Hanya admin yang bisa delete
+                DeleteAction::make()->visible(fn () => $isAdmin),
             ])
             ->bulkActions([
+                // Hanya admin yang bisa delete bulk
                 BulkActionGroup::make([
-                    DeleteBulkAction::make(),
+                    DeleteBulkAction::make()->visible(fn () => $isAdmin),
                 ]),
             ]);
     }

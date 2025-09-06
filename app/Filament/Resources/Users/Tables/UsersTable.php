@@ -1,45 +1,43 @@
 <?php
 
-namespace App\Filament\Resources\Asets\Tables;
+namespace App\Filament\Resources\Users\Tables;
 
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
-use Illuminate\Support\Facades\Auth;
 
-class AsetsTable
+class UsersTable
 {
     public static function configure(Table $table): Table
     {
-        $isAdmin = Auth::user()->hasRole('admin');
-
         return $table
             ->columns([
-                TextColumn::make('nama_barang')
-                    ->sortable()
-                    ->searchable(),
-                TextColumn::make('jumlah_barang')
-                    ->numeric()
+                TextColumn::make('name')
+                    ->label('Nama')
+                    ->searchable()
                     ->sortable(),
-                TextColumn::make('sisa_barang')
-                    ->numeric()
+                TextColumn::make('email')
+                    ->label('Email')
+                    ->searchable()
                     ->sortable(),
-                TextColumn::make('atas_nama')
+                TextColumn::make('roles.name')
+                    ->label('Role')
+                    ->badge()
+                    ->color('primary'),
+                TextColumn::make('email_verified_at')
+                    ->label('Email Verified')
+                    ->dateTime()
                     ->sortable()
-                    ->searchable(),
-                TextColumn::make('lokasi')
-                    ->sortable()
-                    ->searchable(),
-                TextColumn::make('keterangan')
-                    ->sortable()
-                    ->searchable(),
+                    ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('created_at')
+                    ->label('Dibuat')
                     ->dateTime()
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('updated_at')
+                    ->label('Diupdate')
                     ->dateTime()
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
@@ -48,13 +46,11 @@ class AsetsTable
                 //
             ])
             ->recordActions([
-                // Hanya admin yang bisa edit
-                EditAction::make()->visible(fn () => $isAdmin),
+                EditAction::make(),
             ])
             ->toolbarActions([
-                // Hanya admin yang bisa delete bulk
                 BulkActionGroup::make([
-                    DeleteBulkAction::make()->visible(fn () => $isAdmin),
+                    DeleteBulkAction::make(),
                 ]),
             ]);
     }
