@@ -5,6 +5,8 @@ namespace App\Filament\Resources\PengajuanPinjaman\Pages;
 use App\Filament\Resources\PengajuanPinjaman\PengajuanPinjamanResource;
 use Filament\Resources\Pages\CreateRecord;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use App\Models\Aset;
 use Carbon\Carbon;
 
 class CreatePengajuanPinjaman extends CreateRecord
@@ -13,14 +15,18 @@ class CreatePengajuanPinjaman extends CreateRecord
 
     protected function mutateFormDataBeforeCreate(array $data): array
     {
-        // Set default values untuk user yang sedang login dengan timezone WITA
+        // Set user_id otomatis
         $data['user_id'] = Auth::id();
-        $data['tanggal_pengajuan'] = Carbon::now('Asia/Makassar');
-        $data['status'] = 'diajukan';
-
+        // Pastikan tanggal_pengajuan memakai waktu sistem (timezone app)
+        $data['tanggal_pengajuan'] = \Carbon\Carbon::now()->setTimezone(config('app.timezone'));
+        
         return $data;
     }
 
+    // Aksi pengurangan stok di sini dihapus.
+    // Stok sekarang akan berkurang hanya setelah pengajuan disetujui
+    // oleh admin melalui action terpisah.
+    
     protected function getRedirectUrl(): string
     {
         return $this->getResource()::getUrl('index');

@@ -6,10 +6,14 @@ use App\Filament\Resources\PengajuanPinjaman\PengajuanPinjamanResource;
 use Filament\Actions\DeleteAction;
 use Filament\Resources\Pages\EditRecord;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use App\Models\Aset;
 
 class EditPengajuanPinjaman extends EditRecord
 {
     protected static string $resource = PengajuanPinjamanResource::class;
+
+    // Hilangkan manajemen stok di level halaman; ditangani oleh model event
 
     protected function getHeaderActions(): array
     {
@@ -19,19 +23,6 @@ class EditPengajuanPinjaman extends EditRecord
             // Hanya admin yang bisa delete
             DeleteAction::make()->visible(fn () => $isAdmin),
         ];
-    }
-
-    protected function mutateFormDataBeforeFill(array $data): array
-    {
-        // Set nilai default untuk sisa_barang berdasarkan aset yang dipilih
-        if (isset($data['aset_id'])) {
-            $aset = \App\Models\Aset::find($data['aset_id']);
-            if ($aset) {
-                $data['sisa_barang'] = $aset->sisa_barang;
-            }
-        }
-        
-        return $data;
     }
 
     protected function getRedirectUrl(): string

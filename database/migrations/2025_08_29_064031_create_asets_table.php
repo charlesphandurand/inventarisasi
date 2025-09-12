@@ -15,7 +15,6 @@ return new class extends Migration
             $table->id();
             $table->string('nama_barang');
             $table->integer('jumlah_barang')->default(0);
-            $table->integer('sisa_barang')->default(0);
             $table->integer('penambahan_barang')->default(0);
             $table->integer('pengajuan_barang')->default(0);
             $table->timestamps();

@@ -24,18 +24,30 @@ class PengajuanPinjamanTable
 
         return $table
             ->columns([
+                TextColumn::make('user.name')
+                    ->label('Nama Peminjam')
+                    ->searchable()
+                    ->sortable()
+                    ->visible(fn () => $isAdmin),
                 TextColumn::make('aset.nama_barang')
                     ->label('Nama Barang')
                     ->sortable()
-                    ->searchable(),
+                    ->searchable()
+                    ->visible(fn () => $isAdmin),
                 
                 TextColumn::make('jumlah_pinjam')
                     ->label('Jumlah Pinjam')
                     ->numeric()
                     ->sortable(),
 
+                // Kolom baru untuk menampilkan sisa barang di tabel
+                TextColumn::make('aset.jumlah_barang')
+                    ->label('Sisa Barang')
+                    ->numeric()
+                    ->sortable(),
+
                 TextColumn::make('admin.name')
-                    ->label('Disetujui Oleh')
+                    ->label('Diverifikasi Oleh')
                     ->sortable()
                     ->searchable(),
 
@@ -45,20 +57,23 @@ class PengajuanPinjamanTable
                         'diajukan' => 'warning',
                         'disetujui' => 'success',
                         'ditolak' => 'danger',
-                    }),
+                    })
+                    ->sortable(),
                     
                 TextColumn::make('created_at')
                     ->label('Tanggal Pengajuan')
                     ->dateTime()
-                    ->timezone('Asia/Makassar')
-                    ->sortable(),
+                    ->sortable()
+                    ->default(function () {
+                        return Carbon::now()->setTimezone(config('app.timezone'))->toDateTimeString();
+                    }),
 
-                TextColumn::make('updated_at')
-                    ->label('Tanggal Approval')
+                TextColumn::make('tanggal_approval')
+                    ->label('Tanggal Diverifikasi')
                     ->dateTime()
-                    ->timezone('Asia/Makassar')
                     ->sortable(),
             ])
+            ->defaultSort('created_at', 'desc')
             ->filters([
                 // Filter untuk user biasa agar hanya lihat pengajuan miliknya sendiri
                 Filter::make('my_pengajuan')
@@ -77,33 +92,49 @@ class PengajuanPinjamanTable
                         $aset = $record->aset;
                         $jumlahPinjam = $record->jumlah_pinjam;
                         
-                        if ($aset->sisa_barang >= $jumlahPinjam) {
-                            $aset->sisa_barang -= $jumlahPinjam;
-                            $aset->save();
-
+                        // VALIDASI PENTING: Cek jumlah_barang
+                        if ($aset->jumlah_barang >= $jumlahPinjam) {
+                            // Kurangi jumlah_barang dengan jumlah yang disetujui
+                            $aset->update([
+                                'jumlah_barang' => $aset->jumlah_barang - $jumlahPinjam
+                            ]);
+                            
                             $record->update([
                                 'status' => 'disetujui',
-                                'tanggal_approval' => Carbon::now('Asia/Makassar'),
+                                'tanggal_approval' => Carbon::now()->setTimezone(config('app.timezone')),
                                 'admin_id' => Auth::id(),
                             ]);
-
-                            Notification::make()
-                                ->title('Pengajuan Disetujui')
-                                ->body('Sisa barang berhasil diperbarui.')
-                                ->success()
-                                ->send();
                         } else {
                             Notification::make()
                                 ->title('Gagal Disetujui')
-                                ->body('Sisa barang tidak mencukupi untuk pengajuan ini.')
+                                ->body('Jumlah barang tidak mencukupi untuk pengajuan ini.')
                                 ->danger()
                                 ->send();
                         }
                     }),
+                
+                // Tambahkan aksi 'Tolak' untuk admin
+                Action::make('tolak')
+                    ->label('Tolak')
+                    ->icon('heroicon-o-x-circle')
+                    ->color('danger')
+                    ->visible(fn ($record) => $record->status === 'diajukan' && $isAdmin)
+                    ->action(function ($record) {
+                        $record->update([
+                            'status' => 'ditolak',
+                            'tanggal_approval' => Carbon::now()->setTimezone(config('app.timezone')),
+                            'admin_id' => Auth::id(),
+                        ]);
+
+                        Notification::make()
+                            ->title('Pengajuan Ditolak')
+                            ->body('Pengajuan berhasil ditolak.')
+                            ->danger()
+                            ->send();
+                    }),
 
                 // Admin bisa edit semua, user hanya bisa edit miliknya sendiri PENTING!!!!
                 EditAction::make()->visible(fn ($record) => $isAdmin || $record->user_id === $currentUserId),
-                // PENTING!!!!
                 
                 // Hanya admin yang bisa delete
                 DeleteAction::make()->visible(fn () => $isAdmin),

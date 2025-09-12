@@ -16,12 +16,20 @@ class AsetFactory extends Factory
      */
     public function definition(): array
     {
+        $lokasiList = [
+            'Gudang ATK Lt. 1',
+            'Gudang Lt. 3',
+            'Gudang Lt. 4',
+            'Gudang Lt. 5',
+            'Gudang Lt. 6',
+            'Gudang RBI Kayu Tangi',
+            'Gudang RBI Bumi Asih',
+        ];
+
         return [
             'nama_barang' => $this->faker->word(),
             'jumlah_barang' => $this->faker->numberBetween(1, 100),
-            'sisa_barang' => $this->faker->numberBetween(1, 100),
-            'lokasi' => $this->faker->city(),
-            'atas_nama' => $this->faker->name(),
+            'lokasi' => $this->faker->randomElement($lokasiList),
             'keterangan' => $this->faker->sentence(),
         ];
     }

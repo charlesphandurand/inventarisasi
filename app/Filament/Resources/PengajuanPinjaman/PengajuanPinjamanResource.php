@@ -8,7 +8,7 @@ use App\Filament\Resources\PengajuanPinjaman\Pages\ListPengajuanPinjaman;
 use App\Filament\Resources\PengajuanPinjaman\Schemas\PengajuanPinjamanForm;
 use App\Filament\Resources\PengajuanPinjaman\Tables\PengajuanPinjamanTable;
 use App\Models\PengajuanPinjaman;
-use Filament\Schemas\Schema; 
+use Filament\Schemas\Schema;
 use BackedEnum;
 use UnitEnum;
 use Filament\Resources\Resource;
