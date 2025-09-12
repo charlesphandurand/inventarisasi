@@ -36,6 +36,7 @@ class PengajuanPinjamanForm
                         'diajukan' => 'Diajukan',
                         'disetujui' => 'Disetujui',
                         'ditolak' => 'Ditolak',
+                        'dikembalikan' => 'Dikembalikan',
                     ])
                     ->default('diajukan')
                     ->visible(fn ($livewire) => $livewire instanceof \Filament\Resources\Pages\EditRecord && Auth::user()?->hasRole('admin'))

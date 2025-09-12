@@ -57,6 +57,7 @@ class PengajuanPinjamanTable
                         'diajukan' => 'warning',
                         'disetujui' => 'success',
                         'ditolak' => 'danger',
+                        'dikembalikan' => 'info',
                     })
                     ->sortable(),
                     
@@ -130,6 +131,36 @@ class PengajuanPinjamanTable
                             ->title('Pengajuan Ditolak')
                             ->body('Pengajuan berhasil ditolak.')
                             ->danger()
+                            ->send();
+                    }),
+
+                // Tambahkan aksi 'Dikembalikan' untuk status disetujui
+                Action::make('dikembalikan')
+                    ->label('Dikembalikan')
+                    ->icon('heroicon-o-arrow-uturn-left')
+                    ->color('info')
+                    ->visible(fn ($record) => $record->status === 'disetujui' && $isAdmin)
+                    ->requiresConfirmation()
+                    ->modalHeading('Konfirmasi Pengembalian')
+                    ->modalDescription('Apakah Anda yakin ingin mengembalikan barang ini? Jumlah barang akan ditambahkan kembali ke stok aset.')
+                    ->action(function ($record) {
+                        $aset = $record->aset;
+                        $jumlahPinjam = $record->jumlah_pinjam;
+                        
+                        // Tambahkan kembali jumlah barang ke aset
+                        $aset->update([
+                            'jumlah_barang' => $aset->jumlah_barang + $jumlahPinjam
+                        ]);
+                        
+                        $record->update([
+                            'status' => 'dikembalikan',
+                            'tanggal_approval' => Carbon::now()->setTimezone(config('app.timezone')),
+                        ]);
+
+                        Notification::make()
+                            ->title('Barang Dikembalikan')
+                            ->body("Barang {$aset->nama_barang} sebanyak {$jumlahPinjam} unit telah dikembalikan dan ditambahkan ke stok.")
+                            ->success()
                             ->send();
                     }),
 
