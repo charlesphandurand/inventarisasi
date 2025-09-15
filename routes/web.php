@@ -14,7 +14,7 @@ Route::get('/admin/asets/export-laporan', function () {
         ->orderBy('nama_barang')
         ->get();
 
-    // Buat XLSX sederhana (Office Open XML) minimal dengan sheet 1
+    // Buat XLSX sederhana (Office Open XML)
     $zip = new \ZipArchive();
     $tmpFile = tempnam(sys_get_temp_dir(), 'xlsx_');
     $zip->open($tmpFile, \ZipArchive::OVERWRITE);
@@ -28,7 +28,7 @@ Route::get('/admin/asets/export-laporan', function () {
         return $sharedStrings[$key]['i'];
     };
 
-    // Sheet data (rows start at 1). Header di A1..D1
+    // Header
     $rowsXml = [];
     $headers = ['Nama barang', 'Jumlah barang', 'Lokasi', 'Keterangan'];
     $hCells = [];
@@ -39,6 +39,7 @@ Route::get('/admin/asets/export-laporan', function () {
     }
     $rowsXml[] = '<row r="1">' . implode('', $hCells) . '</row>';
 
+    // Data rows
     $r = 2;
     foreach ($asets as $a) {
         $cells = [];
@@ -109,11 +110,15 @@ Route::get('/admin/asets/export-laporan', function () {
     ])->deleteFileAfterSend(true);
 })->name('asets.export.laporan')->middleware(['web']);
 
-// Export Low Stock dari widget, plus penanda RUSAK/Expired. Dikirim sebagai Excel-compatible HTML table (.xls)
+// Export Low Stock ke Excel-compatible HTML table (.xls)
 Route::get('/admin/asets/export-lowstock', function () {
     $asets = Aset::query()
-        ->where('jumlah_barang', '<=', 5)
-        ->orderBy('jumlah_barang')
+        ->where(function ($q) {
+            $q->where('jumlah_barang', '<=', 5)
+              ->orWhereRaw('LOWER(keterangan) LIKE ?', ['%rusak%'])
+              ->orWhereRaw('LOWER(keterangan) LIKE ?', ['%expired%']);
+        })
+        ->orderBy('jumlah_barang', 'asc')
         ->orderBy('nama_barang')
         ->get(['nama_barang','jumlah_barang','lokasi','keterangan']);
 
@@ -123,16 +128,14 @@ Route::get('/admin/asets/export-lowstock', function () {
         th{background:#f2f2f2;}
     </style></head><body>';
     $html .= '<table><thead><tr>'
-        .'<th>Nama Barang</th><th>Lokasi</th><th>Sisa</th><th>Rusak/Expired</th>'
+        .'<th>Nama Barang</th><th>Lokasi</th><th>Sisa</th><th>Keterangan</th>'
         .'</tr></thead><tbody>';
     foreach ($asets as $a) {
-        $ket = strtolower((string) $a->keterangan);
-        $flag = (str_contains($ket, 'rusak') || str_contains($ket, 'expired')) ? 'Ya' : '-';
         $html .= '<tr>'
             .'<td>'. htmlspecialchars($a->nama_barang ?? '') .'</td>'
             .'<td>'. htmlspecialchars($a->lokasi ?? '') .'</td>'
             .'<td>'. (int)$a->jumlah_barang .'</td>'
-            .'<td>'. $flag .'</td>'
+            .'<td>'. htmlspecialchars($a->keterangan ?? '-') .'</td>'
             .'</tr>';
     }
     $html .= '</tbody></table></body></html>';
