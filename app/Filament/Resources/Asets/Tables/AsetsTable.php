@@ -13,6 +13,7 @@ use Filament\Tables\Filters\Filter;
 use Filament\Forms\Components\Textarea;
 use Filament\Tables\Actions\BulkAction;
 use Illuminate\Database\Eloquent\Builder;
+use Filament\Actions\Action;
 
 class AsetsTable
 {
@@ -29,6 +30,7 @@ class AsetsTable
                 TextColumn::make('jumlah_barang')
                     ->label('Jumlah Barang')
                     ->numeric()
+                    ->searchable()
                     ->sortable(),
                 // atas_nama dihapus dari tampilan
                 TextColumn::make('lokasi')
@@ -48,6 +50,7 @@ class AsetsTable
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
+            // headerActions dipindahkan ke ListAsets agar sejajar dengan "New aset"
             ->recordActions([
                 // Hanya admin yang bisa edit
                 EditAction::make()->visible(fn () => $isAdmin),

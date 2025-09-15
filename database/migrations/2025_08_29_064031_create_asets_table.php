@@ -20,7 +20,7 @@ return new class extends Migration
             $table->timestamps();
             $table->string('lokasi')->nullable();
             $table->string('atas_nama')->nullable();
-            $table->string('keterangan')->nullable();
+            // $table->string('keterangan')->nullable()678y 9ynoiuk9;
         });
     }
 
