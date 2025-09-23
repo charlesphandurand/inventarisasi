@@ -5,6 +5,7 @@ namespace App\Filament\Resources\PengajuanPinjaman\Schemas;
 use App\Models\Aset;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Placeholder;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Illuminate\Support\Facades\Auth;
@@ -22,13 +23,14 @@ class PengajuanPinjamanForm
                             ->whereNotNull('nama_barang')
                             ->get()
                             ->mapWithKeys(function ($aset) {
-                                return [$aset->id => "{$aset->nama_barang} (Stok: {$aset->jumlah_barang})"];
+                                $lokasi = $aset->lokasi ?: 'Tanpa Lokasi';
+                                return [$aset->id => "{$aset->nama_barang} - {$lokasi} (Stok: {$aset->jumlah_barang})"];
                             })
                     )
                     ->required()
                     ->searchable()
                     ->reactive(),
-                
+               
                 // Kembalikan dropdown status untuk admin saat edit
                 Select::make('status')
                     ->label('Status')
@@ -56,11 +58,13 @@ class PengajuanPinjamanForm
                             }
                         }
                     }),
+                    
                 TextInput::make('jumlah_pinjam')
                     ->label('Jumlah Pinjam')
                     ->required()
                     ->numeric()
                     ->minValue(1)
+                    ->reactive()
                     ->rules([
                         function (Get $get) {
                             return function (string $attribute, $value, \Closure $fail) use ($get) {
@@ -80,6 +84,38 @@ class PengajuanPinjamanForm
                             };
                         },
                     ]),
+
+                // Keterangan live stok dipindahkan ke bawah field jumlah pinjam
+                Placeholder::make('live_stock_info')
+                    ->label('Informasi Stok')
+                    ->content(function (Get $get) {
+                        $asetId = $get('aset_id');
+                        $jumlahPinjam = (int) $get('jumlah_pinjam');
+                        
+                        if (!$asetId) {
+                            return 'Pilih aset terlebih dahulu untuk melihat informasi stok';
+                        }
+                        
+                        $aset = Aset::find($asetId);
+                        if (!$aset) {
+                            return 'Aset tidak ditemukan';
+                        }
+                        
+                        $stokTersedia = $aset->jumlah_barang;
+                        $lokasi = $aset->lokasi ?: 'Tanpa Lokasi';
+                        $sisaStok = $stokTersedia - $jumlahPinjam;
+                        
+                        $info = "📦 {$aset->nama_barang}\n📍 Lokasi: {$lokasi}\n📊 Stok Tersedia: {$stokTersedia}";
+                        
+                        if ($jumlahPinjam > 0) {
+                            $status = $sisaStok >= 0 ? '✅ Stok Cukup' : '❌ Stok Tidak Cukup';
+                            $info .= "\n📋 Sisa Setelah Dipinjam: {$sisaStok} ({$status})";
+                        }
+                        
+                        return $info;
+                    })
+                    ->visible(fn (Get $get) => $get('aset_id') !== null),
+
                 // Field tanggal_pinjam, tanggal_kembali_rencana, dan keperluan dihapus sesuai permintaan
             ]);
     }
