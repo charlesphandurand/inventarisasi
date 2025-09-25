@@ -13,6 +13,8 @@ class Aset extends Model
         'jumlah_barang',
         'lokasi',
         'keterangan',
+        'nama_vendor', // Variabel baru
+        'harga',       // Variabel baru
     ];
 
     public function pengajuanPinjaman()

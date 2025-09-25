@@ -32,7 +32,14 @@ class AsetsTable
                     ->numeric()
                     ->searchable()
                     ->sortable(),
-                // atas_nama dihapus dari tampilan
+                TextColumn::make('nama_vendor')
+                    ->label('Nama Vendor')
+                    ->sortable()
+                    ->searchable(),
+                TextColumn::make('harga')
+                    ->label('Harga')
+                    ->money('IDR', locale: 'id')
+                    ->sortable(),
                 TextColumn::make('lokasi')
                     ->sortable()
                     ->searchable()
@@ -50,9 +57,7 @@ class AsetsTable
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
-            // headerActions dipindahkan ke ListAsets agar sejajar dengan "New aset"
             ->recordActions([
-                // Hanya admin yang bisa edit
                 EditAction::make()->visible(fn () => $isAdmin),
             ])
             ->filters([
@@ -71,6 +76,23 @@ class AsetsTable
                     ->query(function (Builder $query, array $data): Builder {
                         return isset($data['lokasi']) && $data['lokasi'] !== null
                             ? $query->where('lokasi', $data['lokasi'])
+                            : $query;
+                    }),
+                Filter::make('nama_vendor')
+                    ->label('Nama Vendor')
+                    ->form([
+                        \Filament\Forms\Components\Select::make('nama_vendor')
+                            ->options(fn () => \App\Models\Aset::query()
+                                ->whereNotNull('nama_vendor')
+                                ->distinct()
+                                ->pluck('nama_vendor', 'nama_vendor')
+                                ->toArray())
+                            ->searchable()
+                            ->preload(),
+                    ])
+                    ->query(function (Builder $query, array $data): Builder {
+                        return isset($data['nama_vendor']) && $data['nama_vendor'] !== null
+                            ? $query->where('nama_vendor', $data['nama_vendor'])
                             : $query;
                     }),
             ])

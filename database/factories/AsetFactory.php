@@ -25,12 +25,23 @@ class AsetFactory extends Factory
             'Gudang RBI Kayu Tangi',
             'Gudang RBI Bumi Asih',
         ];
+        
+        // Daftar nama vendor dummy
+        $vendorList = [
+            'PT. Sinar Jaya',
+            'CV. Makmur Sentosa',
+            'PT. Global Cemerlang',
+            'UD. Mandiri Abadi',
+            'Toko Berkah Bersama',
+        ];
 
         return [
             'nama_barang' => $this->faker->word(),
             'jumlah_barang' => $this->faker->numberBetween(1, 100),
             'lokasi' => $this->faker->randomElement($lokasiList),
             'keterangan' => $this->faker->sentence(),
+            'nama_vendor' => $this->faker->randomElement($vendorList), // Tambahan untuk nama vendor
+            'harga' => $this->faker->numberBetween(100000, 10000000),  // Tambahan untuk harga
         ];
     }
 }

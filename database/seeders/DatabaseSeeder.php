@@ -124,7 +124,8 @@ class DatabaseSeeder extends Seeder
             $user->assignRole('user');
         }
 
-        // 8. Buat data aset
+        // 8. Buat data aset dengan factory.
+        // Pastikan AsetFactory.php sudah diperbarui untuk mengisi kolom 'nama_vendor' dan 'harga'.
         Aset::factory()->count(100)->create();
 
         // 9. Buat 20 data pengajuan pinjaman secara acak
