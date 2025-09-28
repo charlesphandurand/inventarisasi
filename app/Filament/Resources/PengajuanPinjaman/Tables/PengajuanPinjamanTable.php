@@ -92,15 +92,13 @@ class PengajuanPinjamanTable
                     ->action(function ($record) {
                         
                         DB::transaction(function () use ($record) {
-                            // Ambil instance Aset secara eksplisit dan lock
                             $aset = Aset::find($record->aset_id);
                             
                             if (!$aset) {
                                 Notification::make()->title('Error')->body('Aset tidak ditemukan.')->danger()->send();
-                                return; // Rollback otomatis oleh transaction
+                                return;
                             }
                             
-                            // Lock baris aset untuk mencegah race condition (pembacaan ganda)
                             $aset->lockForUpdate(); 
                             
                             $jumlahPinjam = $record->jumlah_pinjam;
@@ -109,55 +107,53 @@ class PengajuanPinjamanTable
                             if ($stokSebelum < $jumlahPinjam) {
                                 Notification::make()
                                     ->title('Gagal Disetujui')
-                                    ->body("Jumlah barang '{$aset->nama_barang}' tidak mencukupi untuk pengajuan ini. Sisa stok: {$stokSebelum}")
+                                    ->body("Jumlah barang '{$aset->nama_barang}' tidak mencukupi. Sisa stok: {$stokSebelum}")
                                     ->danger()
                                     ->send();
-                                return; // Rollback otomatis oleh transaction
+                                return;
                             }
                             
-                            $lokasiSebelum = $aset->lokasi;
+                            $lokasiGudang = $aset->lokasi; // Lokasi Gudang (TETAP)
                             $peminjamNama = $record->user?->name ?? 'Peminjam';
                             
                             $stokSesudah = $stokSebelum - $jumlahPinjam;
 
-                            // 1. RAW UPDATE STOK & LOKASI
-                            // Menggunakan WHERE untuk memastikan stok belum berubah (Optimistic Locking)
+                            // 1. RAW UPDATE STOK SAJA (HAPUS PERUBAHAN LOKASI DARI ASSET)
                             $updated = DB::table('asets')
                                 ->where('id', $aset->id)
                                 ->where('jumlah_barang', $stokSebelum) 
                                 ->update([
                                     'jumlah_barang' => $stokSesudah,
-                                    'lokasi' => $peminjamNama,
+                                    // ❌ BARIS 'lokasi' => $peminjamNama, DIHAPUS ❌
                                 ]);
 
                             if (!$updated) {
-                                // Jika update gagal, berarti ada race condition
                                 Notification::make()
                                     ->title('Gagal Disetujui')
                                     ->body('Terjadi masalah konsistensi data (Race Condition). Silakan coba lagi.')
                                     ->danger()
                                     ->send();
-                                return; // Rollback otomatis oleh transaction
+                                return;
                             }
 
-                            // 2. Update record pengajuan (menggunakan saveQuietly untuk MENGHINDARI MODEL EVENT 'updated')
+                            // 2. Update record pengajuan
                             $record->forceFill([
                                 'status' => 'disetujui',
                                 'tanggal_approval' => Carbon::now()->setTimezone(config('app.timezone')),
                                 'admin_id' => Auth::id(),
-                                'lokasi_sebelum' => $lokasiSebelum, // Simpan lokasi awal sebelum dipinjam
+                                'lokasi_sebelum' => $lokasiGudang, // Simpan lokasi awal sebelum dipinjam
                             ])->saveQuietly();
                             
-                            // 3. Catat riwayat PINJAM DISETUJUI
+                            // 3. Catat riwayat PINJAM DISETUJUI (LOKASI SESUDAH = NAMA PEMINJAM)
                             RiwayatAset::create([
                                 'aset_id' => $aset->id,
-                                'user_id' => Auth::id(), // Admin yang menyetujui
+                                'user_id' => Auth::id(),
                                 'tipe' => 'pinjam_disetujui',
                                 'jumlah_perubahan' => -$jumlahPinjam,
                                 'stok_sebelum' => $stokSebelum,
                                 'stok_sesudah' => $stokSesudah,
-                                'lokasi_sebelum' => $lokasiSebelum,
-                                'lokasi_sesudah' => $peminjamNama,
+                                'lokasi_sebelum' => $lokasiGudang, // Lokasi Gudang
+                                'lokasi_sesudah' => $peminjamNama, // 👈 INI YANG BENAR: LOKASI RIWAYAT = PEMINJAM
                                 'keterangan' => 'Disetujui dan dipinjam oleh ' . $peminjamNama,
                             ]);
                             
@@ -169,14 +165,13 @@ class PengajuanPinjamanTable
                         });
                     }),
                 
-                // Aksi 'Tolak' (Tidak ada perubahan signifikan)
+                // Aksi 'Tolak' (Tidak ada perubahan stok/lokasi)
                 Action::make('tolak')
                     ->label('Tolak')
                     ->icon('heroicon-o-x-circle')
                     ->color('danger')
                     ->visible(fn ($record) => $record->status === 'diajukan' && $isAdmin)
                     ->action(function ($record) {
-                        // Tidak perlu transaksi DB karena tidak memengaruhi stok aset
                         $record->update([
                             'status' => 'ditolak',
                             'tanggal_approval' => Carbon::now()->setTimezone(config('app.timezone')),
@@ -198,35 +193,34 @@ class PengajuanPinjamanTable
                     ->visible(fn ($record) => $record->status === 'disetujui' && $isAdmin)
                     ->requiresConfirmation()
                     ->modalHeading('Konfirmasi Pengembalian')
-                    ->modalDescription('Apakah Anda yakin ingin mengembalikan barang ini? Stok akan dikembalikan ke lokasi semula.')
+                    ->modalDescription('Apakah Anda yakin ingin mengembalikan barang ini? Stok akan dikembalikan.')
                     ->action(function ($record) {
                         
                         DB::transaction(function () use ($record) {
-                            // Ambil instance Aset secara eksplisit dan lock
                             $aset = Aset::find($record->aset_id);
 
                             if (!$aset) {
                                 Notification::make()->title('Error')->body('Aset tidak ditemukan.')->danger()->send();
-                                return; // Rollback otomatis oleh transaction
+                                return;
                             }
                             $aset->lockForUpdate();
 
                             $jumlahPinjam = $record->jumlah_pinjam;
                             
-                            $lokasiSebelum = $record->lokasi_sebelum ?? $aset->lokasi; // Gunakan lokasi_sebelum yang tersimpan
+                            // Ambil lokasi Gudang dari record Peminjaman
+                            $lokasiGudang = $record->lokasi_sebelum ?? $aset->lokasi; 
                             $peminjamNama = $record->user?->name ?? 'Peminjam';
                             
                             $stokSebelum = $aset->jumlah_barang;
                             $stokSesudah = $stokSebelum + $jumlahPinjam;
                             
-                            // 1. RAW UPDATE STOK & LOKASI
-                            // Menggunakan WHERE untuk memastikan stok belum berubah (Optimistic Locking)
+                            // 1. RAW UPDATE STOK SAJA (HAPUS PERUBAHAN LOKASI DARI ASSET)
                             $updated = DB::table('asets')
                                 ->where('id', $aset->id)
                                 ->where('jumlah_barang', $stokSebelum) 
                                 ->update([
                                     'jumlah_barang' => $stokSesudah,
-                                    'lokasi' => $lokasiSebelum, // Kembalikan ke lokasi sebelum dipinjam
+                                    // ❌ BARIS 'lokasi' => $lokasiSebelum, DIHAPUS ❌ (Lokasi di aset utama sudah Gudang)
                                 ]);
 
                             if (!$updated) {
@@ -235,26 +229,26 @@ class PengajuanPinjamanTable
                                     ->body('Terjadi masalah konsistensi data (Race Condition). Stok tidak dapat dikembalikan.')
                                     ->danger()
                                     ->send();
-                                return; // Rollback otomatis oleh transaction
+                                return;
                             }
                             
-                            // 2. Update record pengajuan (menggunakan saveQuietly untuk MENGHINDARI MODEL EVENT 'updated')
+                            // 2. Update record pengajuan
                             $record->forceFill([
                                 'status' => 'dikembalikan',
                                 'tanggal_approval' => Carbon::now()->setTimezone(config('app.timezone')),
                             ])->saveQuietly();
 
-                            // 3. Catat riwayat PINJAM DIKEMBALIKAN
+                            // 3. Catat riwayat PINJAM DIKEMBALIKAN (LOKASI SESUDAH = LOKASI GUDANG)
                             RiwayatAset::create([
                                 'aset_id' => $aset->id,
-                                'user_id' => Auth::id(), // Admin yang mengembalikan
+                                'user_id' => Auth::id(),
                                 'tipe' => 'pinjam_dikembalikan',
                                 'jumlah_perubahan' => $jumlahPinjam,
                                 'stok_sebelum' => $stokSebelum,
                                 'stok_sesudah' => $stokSesudah,
-                                'lokasi_sebelum' => $peminjamNama,
-                                'lokasi_sesudah' => $lokasiSebelum,
-                                'keterangan' => "Barang dikembalikan oleh {$peminjamNama} ke {$lokasiSebelum}",
+                                'lokasi_sebelum' => $peminjamNama, // Lokasi Peminjam
+                                'lokasi_sesudah' => $lokasiGudang, // 👈 INI YANG BENAR: LOKASI RIWAYAT = GUDANG
+                                'keterangan' => "Barang dikembalikan oleh {$peminjamNama} ke {$lokasiGudang}",
                             ]);
 
                             Notification::make()

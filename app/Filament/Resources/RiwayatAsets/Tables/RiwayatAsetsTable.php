@@ -16,6 +16,10 @@ class RiwayatAsetsTable
                     ->label('Aset')
                     ->searchable()
                     ->sortable(),
+                TextColumn::make('aset.nama_vendor')
+                    ->label('Vendor')
+                    ->searchable()
+                    ->sortable(),
                 TextColumn::make('tipe')
                     ->label('Tipe')
                     ->badge()
