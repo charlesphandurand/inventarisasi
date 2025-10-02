@@ -21,7 +21,7 @@ class PengajuanPinjamanTable
 {
     public static function configure(Table $table): Table
     {
-        $isAdmin = Auth::user()->hasRole('admin');
+        $isAdmin = Auth::user()->hasAnyRole(['approver']);
         $currentUserId = Auth::id();
 
         return $table
@@ -29,13 +29,11 @@ class PengajuanPinjamanTable
                 TextColumn::make('user.name')
                     ->label('Nama Peminjam')
                     ->searchable()
-                    ->sortable()
-                    ->visible(fn () => $isAdmin),
+                    ->sortable(),
                 TextColumn::make('aset.nama_barang')
                     ->label('Nama Barang')
                     ->sortable()
-                    ->searchable()
-                    ->visible(fn () => $isAdmin),
+                    ->searchable(),
                 
                 TextColumn::make('jumlah_pinjam')
                     ->label('Jumlah Pinjam')
@@ -59,6 +57,7 @@ class PengajuanPinjamanTable
                         'disetujui' => 'success',
                         'ditolak' => 'danger',
                         'dikembalikan' => 'info',
+                        default => 'gray',
                     })
                     ->sortable(),
                     

@@ -9,6 +9,7 @@ use Filament\Tables\Filters\SelectFilter;
 use Filament\Widgets\TableWidget as BaseWidget;
 use Illuminate\Database\Eloquent\Builder;
 use Filament\Actions\Action;
+use Illuminate\Support\Facades\Auth; // Tambahkan import untuk Auth
 
 class LowStockWidget extends BaseWidget
 {
@@ -20,13 +21,16 @@ class LowStockWidget extends BaseWidget
 
     public function table(Table $table): Table
     {
+        // Mendapatkan status peran pengguna saat ini
+        $isAdminOrApprover = Auth::user()->hasRole('admin') || Auth::user()->hasRole('approver');
+
         return $table
             ->query(
                 Aset::query()
                     ->where(function ($q) {
                         $q->where('jumlah_barang', '<=', 5)
-                          ->orWhereRaw('LOWER(keterangan) LIKE ?', ['%rusak%'])
-                          ->orWhereRaw('LOWER(keterangan) LIKE ?', ['%expired%']);
+                            ->orWhereRaw('LOWER(keterangan) LIKE ?', ['%rusak%'])
+                            ->orWhereRaw('LOWER(keterangan) LIKE ?', ['%expired%']);
                     })
                     ->orderBy('jumlah_barang', 'asc')
                     ->orderBy('nama_barang')
@@ -37,7 +41,9 @@ class LowStockWidget extends BaseWidget
                     ->label('Unduh Low Stock')
                     ->icon('heroicon-m-arrow-down-tray')
                     ->url(fn () => route('asets.export.lowstock'))
-                    ->openUrlInNewTab(),
+                    ->openUrlInNewTab()
+                    // LOGIKA PEMBATASAN VISIBILITAS: Hanya admin atau approver
+                    ->visible(fn () => $isAdminOrApprover), 
             ])
             ->columns([
                 TextColumn::make('nama_barang')

@@ -48,9 +48,26 @@ class DatabaseSeeder extends Seeder
         // 2. Buat role 'admin' dan 'user'
         $adminRole = Role::firstOrCreate(['name' => 'admin']);
         $userRole = Role::firstOrCreate(['name' => 'user']);
+        $approverRole = Role::firstOrCreate(['name' => 'approver']);
+
 
         // 3. Berikan semua permission kepada admin
         $adminRole->givePermissionTo($permissions);
+
+        $approverRole->givePermissionTo([
+            // Aset management
+            'view asets',
+            'create asets',
+            'edit asets', 
+            'delete asets',
+            
+            'view pengajuan',
+            'create pengajuan',
+            'edit pengajuan',
+            'delete pengajuan',
+            'approve pengajuan',
+            'reject pengajuan'
+        ]);
 
         // 4. Berikan permission terbatas kepada user
         $userRole->givePermissionTo([
@@ -89,7 +106,7 @@ class DatabaseSeeder extends Seeder
                 'name' => 'Test User 2', 
                 'email' => 'user2@test.com',
                 'password' => '1',
-                'role' => 'user'
+                'role' => 'approver'
             ],
             [
                 'name' => 'Test Admin',

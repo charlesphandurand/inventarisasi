@@ -46,23 +46,35 @@ class UserResource extends Resource
         ];
     }
     
+    /**
+     * Helper function untuk mengecek apakah user memiliki peran Admin ATAU Approver.
+     */
+    protected static function hasManagementAccess(): bool
+    {
+        return auth()->user()->hasRole('approver');
+    }
+
+    // Hanya Admin atau Approver yang boleh melihat menu (Sidebar & Daftar)
     public static function canViewAny(): bool
     {
-        return auth()->user()->can('view users');
+        return self::hasManagementAccess();
     }
 
+    // Hanya Admin atau Approver yang boleh membuat pengguna baru
     public static function canCreate(): bool
     {
-        return auth()->user()->can('create users');
+        return self::hasManagementAccess();
     }
 
+    // Hanya Admin atau Approver yang boleh mengedit pengguna
     public static function canEdit(Model $record): bool
     {
-        return auth()->user()->can('edit users');
+        return self::hasManagementAccess();
     }
 
+    // Hanya Admin atau Approver yang boleh menghapus pengguna
     public static function canDelete(Model $record): bool
     {
-        return auth()->user()->can('delete users');
+        return self::hasManagementAccess();
     }
 }

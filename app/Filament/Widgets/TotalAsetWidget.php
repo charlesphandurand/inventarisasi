@@ -15,12 +15,21 @@ class TotalAsetWidget extends BaseWidget
     // Mengatur lebar kolom widget
     protected int | string | array $columnSpan = 'full';
 
+    // --- LOGIKA PEMBATASAN AKSES ---
+    // Hanya tampilkan widget ini jika pengguna adalah 'admin' ATAU 'approver'
+    public static function canView(): bool
+    {
+        return auth()->user()->hasRole('admin') || auth()->user()->hasRole('approver');
+    }
+
     protected function getStats(): array
     {
         // Mengambil data total stok dari model Aset
         $totalStok = (int) Aset::sum('jumlah_barang');
 
         // Mengambil data stok yang diupdate hari ini
+        // Note: Ini menghitung total stok dari aset yang *diperbarui* hari ini,
+        // bukan hanya perubahan stok hari ini.
         $stokHariIni = (int) Aset::whereDate('updated_at', Carbon::today())->sum('jumlah_barang');
 
         // Mengambil data stok yang diupdate bulan ini

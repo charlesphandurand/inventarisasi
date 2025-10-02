@@ -19,7 +19,7 @@ class AsetsTable
 {
     public static function configure(Table $table): Table
     {
-        $isAdmin = Auth::user()->hasRole('admin');
+        $isAdmin = Auth::user()->hasAnyRole(['admin', 'approver']);
 
         return $table
             ->columns([

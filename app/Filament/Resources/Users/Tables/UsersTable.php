@@ -25,7 +25,12 @@ class UsersTable
                 TextColumn::make('roles.name')
                     ->label('Role')
                     ->badge()
-                    ->color('primary'),
+                    ->color(fn (string $state): string => match ($state) {
+                        'approver' => 'warning',
+                        'admin' => 'success',
+                        'user' => 'info',
+                        default => 'gray',
+                    }),
                 TextColumn::make('email_verified_at')
                     ->label('Email Verified')
                     ->dateTime()

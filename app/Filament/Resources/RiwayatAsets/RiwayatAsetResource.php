@@ -44,8 +44,8 @@ class RiwayatAsetResource extends Resource
 
     public static function canViewAny(): bool
     {
-        return auth()->user()->can('view asets');
+        // Hanya izinkan pengguna dengan peran 'admin' untuk melihat resource ini.
+        // Jika pengguna bukan admin, menu akan disembunyikan dan akses langsung akan dicegah.
+        return auth()->user()->hasRole('admin') || auth()->user()->hasRole('approver');
     }
 }
-
-

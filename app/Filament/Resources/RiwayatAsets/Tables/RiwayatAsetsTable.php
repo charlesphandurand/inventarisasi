@@ -23,6 +23,17 @@ class RiwayatAsetsTable
                 TextColumn::make('tipe')
                     ->label('Tipe')
                     ->badge()
+                    ->color(fn (string $state): string => match ($state) {
+                        'pinjam_dikembalikan' => 'warning',
+                        'create' => 'success',
+                        'pinjam_disetujui' => 'primary',
+                        'lokasi_update' => 'info',
+                        'harga_update' => 'info',
+                        'pinjam_dihapus' => 'danger',
+                        'penambahan' => 'success',
+                        'pengurangan' => 'danger',
+                        default => 'gray',
+                    })
                     ->sortable(),
                 TextColumn::make('jumlah_perubahan')
                     ->label('Stok')

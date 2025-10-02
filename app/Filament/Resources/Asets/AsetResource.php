@@ -16,6 +16,7 @@ use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Auth;
 
 class AsetResource extends Resource
 {
@@ -23,7 +24,7 @@ class AsetResource extends Resource
     
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
 
-    protected static UnitEnum|string|null $navigationGroup = 'Manajemen Aset';  
+    protected static UnitEnum|string|null $navigationGroup = 'Manajemen Aset'; 
     protected static ?string $recordTitleAttribute = 'nama_barang';
 
     public static function form(Schema $schema): Schema
@@ -52,23 +53,34 @@ class AsetResource extends Resource
         ];
     }
 
+    // Fungsi untuk memeriksa apakah aset dapat dilihat (list table)
     public static function canViewAny(): bool
     {
-        return auth()->user()->can('view asets');
+        // Semua pengguna yang memiliki permission 'view asets' dapat melihat daftar aset.
+        return Auth::user()->can('view asets');
     }
 
+    // Fungsi untuk memeriksa apakah aset dapat dibuat
     public static function canCreate(): bool
     {
-        return auth()->user()->can('create asets');
+        $user = Auth::user();
+        // Hanya Admin dan Approver yang dapat membuat aset
+        return $user->hasAnyRole(['admin', 'approver']) && $user->can('create asets');
     }
 
+    // Fungsi untuk memeriksa apakah aset dapat diedit
     public static function canEdit(Model $record): bool
     {
-        return auth()->user()->can('edit asets');
+        $user = Auth::user();
+        // Hanya Admin dan Approver yang dapat mengedit aset
+        return $user->hasAnyRole(['admin', 'approver']) && $user->can('edit asets');
     }
 
+    // Fungsi untuk memeriksa apakah aset dapat dihapus
     public static function canDelete(Model $record): bool
     {
-        return auth()->user()->can('delete asets');
+        $user = Auth::user();
+        // Hanya Admin dan Approver yang dapat menghapus aset
+        return $user->hasAnyRole(['admin', 'approver']) && $user->can('delete asets');
     }
 }
