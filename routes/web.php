@@ -149,5 +149,5 @@ Route::get('/admin/asets/export-lowstock', function () {
 })->name('asets.export.lowstock')->middleware(['web']);
 
 Route::get('/', function () {
-    return view('welcome');
+    return view('home');
 });

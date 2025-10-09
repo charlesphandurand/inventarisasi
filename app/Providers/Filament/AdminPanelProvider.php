@@ -30,7 +30,8 @@ class AdminPanelProvider extends PanelProvider
         return $panel
             ->default()
             ->id('admin')
-            ->path('admin')
+            // Ubah nama path menjadi dashboard
+            ->path('dashboard')
             ->login()
             ->brandLogo(asset('images/bi-logo.png'))
             ->brandLogoHeight('3rem')
