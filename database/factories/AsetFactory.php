@@ -18,6 +18,7 @@ class AsetFactory extends Factory
     {
         $lokasiList = [
             'Gudang ATK Lt. 1',
+            'Gudang ATK Lt. 5',
             'Gudang Lt. 3',
             'Gudang Lt. 4',
             'Gudang Lt. 5',
