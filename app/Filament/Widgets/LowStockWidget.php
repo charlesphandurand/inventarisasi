@@ -8,100 +8,111 @@ use Filament\Tables\Table;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Widgets\TableWidget as BaseWidget;
 use Illuminate\Database\Eloquent\Builder;
-use Filament\Actions\Action;
 use Illuminate\Support\Facades\Auth;
+// Menggunakan impor yang benar dari pxlrbt/filament-excel untuk direct download
+use pxlrbt\FilamentExcel\Actions\Pages\ExportAction; // Import pxlrbt Action
+use pxlrbt\FilamentExcel\Exports\ExcelExport; // Import pxlrbt Exporter
+use pxlrbt\FilamentExcel\Columns\Column; // Import pxlrbt Column
+// use App\Exports\CustomLowStockExport; // TIDAK DIGUNAKAN LAGI
 
 class LowStockWidget extends BaseWidget
 {
     protected static ?int $sort = 2;
-
-    protected static ?string $heading = 'Aset Stok Rendah / Bermasalah di Gudang ATK';
-
     protected int | string | array $columnSpan = 'full';
 
-    // Definisikan kunci pencarian lokasi
-    private const LOCATION_KEYWORD = 'ATK';
+    protected function getTableQuery(): Builder
+    {
+        $user = Auth::user();
+        
+        // 1. Filter dasar: Stok rendah (<= 5)
+        $query = Aset::where('jumlah_barang', '<=', 5);
+
+        // 2. Filter Wajib: Hanya tampilkan lokasi yang mengandung "ATK" (Case-Insensitive)
+        // Menggunakan whereRaw dengan fungsi LOWER() untuk kompatibilitas multi-database
+        $query->whereRaw('LOWER(lokasi) LIKE ?', ['%atk%']);
+
+        // 3. Logika otorisasi (Admin/Approver vs User biasa)
+        // Hanya tampilkan semua data jika pengguna adalah 'admin' atau 'approver'
+        if ($user && ($user->hasRole('admin') || $user->hasRole('approver'))) {
+            return $query;
+        }
+
+        // Jika bukan admin/approver, filter berdasarkan lokasi pengguna
+        // Catatan: Filter ini akan dijalankan SETELAH filter 'ATK'
+        return $query->where('lokasi', $user->lokasi ?? 'tidak-terdefenisi');
+    }
 
     public function table(Table $table): Table
     {
-        // Mendapatkan status peran pengguna saat ini
-        $isAdminOrApprover = Auth::user()->hasRole('admin') || Auth::user()->hasRole('approver');
-
-        // --- 1. QUERY UTAMA (Filter Permanen: Lokasi Mengandung "ATK") ---
-        $query = Aset::query()
-            // Filter lokasi yang mengandung 'ATK' (case-insensitive)
-            // Ini MENGGANTIKAN filter lokasi manual (Gudang ATK Lt. 1 & 5)
-            ->whereRaw('LOWER(lokasi) LIKE ?', ['%' . strtolower(self::LOCATION_KEYWORD) . '%'])
-            // Terapkan filter stok rendah/bermasalah
-            ->where(function ($q) {
-                $q->where('jumlah_barang', '<=', 5)
-                    ->orWhereRaw('LOWER(keterangan) LIKE ?', ['%rusak%'])
-                    ->orWhereRaw('LOWER(keterangan) LIKE ?', ['%expired%']);
-            })
-            ->orderBy('jumlah_barang', 'asc')
-            ->orderBy('nama_barang')
-            ->limit(20);
+        $user = Auth::user();
+        $isAdminOrApprover = $user && ($user->hasRole('admin') || $user->hasRole('approver'));
+        $query = $this->getTableQuery();
         
-        // Ambil daftar lokasi unik yang termasuk dalam filter "ATK" untuk opsi filter
-        $locations = Aset::query()
-            ->whereRaw('LOWER(lokasi) LIKE ?', ['%' . strtolower(self::LOCATION_KEYWORD) . '%'])
-            ->pluck('lokasi', 'lokasi')
-            ->toArray();
-
-
         return $table
             ->query($query)
-            ->headerActions([
-                Action::make('export_low_stock')
-                    ->label('Unduh Low Stock (Filter ATK)')
-                    ->icon('heroicon-m-arrow-down-tray')
-                    // Export hanya untuk data yang mengandung keyword 'ATK'
-                    ->url(fn () => route('asets.export.lowstock', ['keyword' => self::LOCATION_KEYWORD]))
-                    ->openUrlInNewTab()
-                    // LOGIKA PEMBATASAN VISIBILITAS
-                    ->visible(fn () => $isAdminOrApprover), 
-            ])
             ->columns([
                 TextColumn::make('nama_barang')
                     ->label('NAMA BARANG')
                     ->searchable()
+                    ->sortable(),
+                TextColumn::make('jumlah_barang')
+                    ->label('STOK SISA')
                     ->sortable()
-                    ->formatStateUsing(fn (string $state): string => strtoupper($state)),
-
+                    ->badge()
+                    ->color('danger'),
                 TextColumn::make('lokasi')
                     ->label('LOKASI')
                     ->searchable()
-                    ->formatStateUsing(fn (string $state): string => strtoupper($state)),
-
-                TextColumn::make('jumlah_barang')
-                    ->label('SISA')
                     ->sortable()
-                    ->color('danger')
-                    ->badge(),
-
-                TextColumn::make('keterangan')
-                    ->label('KETERANGAN')
-                    ->searchable()
-                    ->wrap()
-                    ->formatStateUsing(fn (?string $state): string => strtoupper($state ?? '-')),
+                    ->visible($isAdminOrApprover), // Hanya terlihat oleh admin/approver
             ])
             ->filters([
-                // --- 2. FILTER LOKASI (HANYA INDIKATOR & PENCARIAN) ---
-                SelectFilter::make('lokasi_filter')
-                    ->label('Cari di Lokasi ATK')
-                    // Opsi hanya lokasi yang mengandung "ATK"
-                    ->options($locations) 
-                    ->searchable()
-                    // Karena filter sudah permanen di query utama,
-                    // Filter ini diubah menjadi filter opsional yang memfilter di antara hasil ATK
-                    ->query(function (Builder $query, array $data): Builder {
-                        // Jika ada nilai yang dipilih pengguna, terapkan filter lokasi.
-                        if (!empty($data['value'])) {
-                            return $query->where('lokasi', $data['value']);
-                        }
-                        // Jika tidak ada nilai yang dipilih, biarkan query utama berlaku (filter ATK permanen)
-                        return $query;
-                    }),
-            ]);
+                SelectFilter::make('lokasi')
+                    // [PERBAIKAN] Ambil lokasi unik yang mengandung "ATK" (case-insensitive)
+                    // Ini memastikan opsi filter hanya menampilkan lokasi yang relevan.
+                    ->options(
+                        Aset::query()
+                            ->select('lokasi')
+                            ->distinct()
+                            ->whereRaw('LOWER(lokasi) LIKE ?', ['%atk%'])
+                            ->pluck('lokasi', 'lokasi')
+                    )
+                    ->visible($isAdminOrApprover)
+            ])
+            ->headerActions([
+                ExportAction::make('lanjutan_custom') 
+                    ->label('Lanjutan (XLSX/CSV)')
+                    ->color('success')
+                    ->icon('heroicon-o-arrow-down-tray')
+                    ->exports([
+                        // Menggunakan pxlrbt/Filament-Excel INLINE Exporter.
+                        // Ekspor ini secara otomatis akan menggunakan query yang difilter oleh getTableQuery().
+                        ExcelExport::make('low_stock_export')
+                            ->askForWriterType() // Tampilkan opsi format (XLSX/CSV)
+                            ->fromTable()
+                            ->withFilename(fn () => 'Laporan Low Stock ATK_' . now()->format('Ymd_His'))
+                            // Pindahkan definisi kolom dari CustomLowStockExport.php ke sini
+                            ->withColumns([
+                                Column::make('nama_barang')->heading('NAMA BARANG'),
+                                Column::make('jumlah_barang')->heading('STOK SISA'),
+                                Column::make('lokasi')->heading('LOKASI'),
+                                Column::make('satuan')->heading('SATUAN'),
+                                Column::make('harga_satuan')
+                                    ->heading('HARGA SATUAN')
+                                    ->formatStateUsing(fn ($state) => $state ? 'Rp ' . number_format($state, 0, ',', '.') : '-'),
+                                Column::make('total_nilai')
+                                    ->heading('TOTAL NILAI')
+                                    ->formatStateUsing(fn ($state) => $state ? 'Rp ' . number_format($state, 0, ',', '.') : '-'),
+                                Column::make('kondisi')->heading('KONDISI'),
+                                Column::make('keterangan')->heading('KETERANGAN'),
+                                Column::make('tanggal_perolehan')->heading('TGL PEROLEHAN')
+                                    ->formatStateUsing(fn ($state) => $state ? \Carbon\Carbon::parse($state)->format('d/m/Y') : '-'),
+                                Column::make('penanggung_jawab')->heading('P. JAWAB'),
+                            ]),
+                    ])
+                    ->visible(fn () => $isAdminOrApprover),
+            ])
+            ->paginated(false)
+            ->defaultSort('jumlah_barang', 'asc');
     }
 }
