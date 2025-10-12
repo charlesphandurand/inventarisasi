@@ -80,7 +80,7 @@ class LowStockWidget extends BaseWidget
             ->headerActions([
                 // ACTION EXCEL
                 ExcelExportAction::make('lanjutan_custom') 
-                    ->label('Lanjutan (XLSX/CSV)')
+                    ->label('Ekspor (XLSX/CSV)')
                     ->color('success')
                     ->icon('heroicon-o-arrow-down-tray')
                     ->exports([
@@ -92,18 +92,18 @@ class LowStockWidget extends BaseWidget
                                 Column::make('nama_barang')->heading('NAMA BARANG'),
                                 Column::make('jumlah_barang')->heading('STOK SISA'),
                                 Column::make('lokasi')->heading('LOKASI'),
-                                Column::make('satuan')->heading('SATUAN'),
-                                Column::make('harga_satuan')
-                                    ->heading('HARGA SATUAN')
-                                    ->formatStateUsing(fn ($state) => $state ? 'Rp ' . number_format($state, 0, ',', '.') : '-'),
-                                Column::make('total_nilai')
-                                    ->heading('TOTAL NILAI')
-                                    ->formatStateUsing(fn ($state) => $state ? 'Rp ' . number_format($state, 0, ',', '.') : '-'),
-                                Column::make('kondisi')->heading('KONDISI'),
+                                // Column::make('satuan')->heading('SATUAN'),
+                                // Column::make('harga_satuan')
+                                //     ->heading('HARGA SATUAN')
+                                //     ->formatStateUsing(fn ($state) => $state ? 'Rp ' . number_format($state, 0, ',', '.') : '-'),
+                                // Column::make('total_nilai')
+                                //     ->heading('TOTAL NILAI')
+                                //     ->formatStateUsing(fn ($state) => $state ? 'Rp ' . number_format($state, 0, ',', '.') : '-'),
+                                // Column::make('kondisi')->heading('KONDISI'),
                                 Column::make('keterangan')->heading('KETERANGAN'),
-                                Column::make('tanggal_perolehan')->heading('TGL PEROLEHAN')
-                                    ->formatStateUsing(fn ($state) => $state ? \Carbon\Carbon::parse($state)->format('d/m/Y') : '-'),
-                                Column::make('penanggung_jawab')->heading('P. JAWAB'),
+                                // Column::make('tanggal_perolehan')->heading('TGL PEROLEHAN')
+                                //     ->formatStateUsing(fn ($state) => $state ? \Carbon\Carbon::parse($state)->format('d/m/Y') : '-'),
+                                // Column::make('penanggung_jawab')->heading('P. JAWAB'),
                             ]),
                     ])
                     ->visible(fn () => $isAdminOrApprover),

@@ -2,6 +2,7 @@
 
 namespace Database\Factories;
 
+use App\Filament\Resources\Asets\AsetResource; // Wajib diimpor
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -27,7 +28,6 @@ class AsetFactory extends Factory
             'Gudang RBI Bumi Asih',
         ];
         
-        // Daftar nama vendor dummy
         $vendorList = [
             'PT. Sinar Jaya',
             'CV. Makmur Sentosa',
@@ -36,13 +36,45 @@ class AsetFactory extends Factory
             'Toko Berkah Bersama',
         ];
 
+        // Tentukan apakah ini ATK atau bukan secara acak
+        $isAtk = $this->faker->boolean(40); // 40% chance of being ATK
+        $kondisiList = ['Baik', 'Kurang Baik', 'Rusak'];
+
         return [
             'nama_barang' => $this->faker->word(),
             'jumlah_barang' => $this->faker->numberBetween(1, 100),
             'lokasi' => $this->faker->randomElement($lokasiList),
             'keterangan' => $this->faker->sentence(),
-            'nama_vendor' => $this->faker->randomElement($vendorList), // Tambahan untuk nama vendor
-            'harga' => $this->faker->numberBetween(100000, 10000000),  // Tambahan untuk harga
+            'nama_vendor' => $this->faker->randomElement($vendorList),
+            'harga' => $this->faker->numberBetween(100000, 10000000),
+            
+            // Tambahan Baru:
+            'is_atk' => $isAtk,
+            'expired_date' => $isAtk ? $this->faker->optional(0.7)->dateTimeBetween('now', '+2 years') : null, // Hanya ATK yang mungkin punya Expired Date
+            'kondisi_barang' => $this->faker->randomElement($kondisiList),
+            'qr_code' => null, // Dibuat null, karena akan diisi setelah record dibuat (via afterCreating)
+            'qr_options' => [], // Kosongkan
         ];
+    }
+    
+    /**
+     * Configure the model factory.
+     * Logika: Setelah aset dibuat dan memiliki ID, update kolom qr_code
+     * dengan URL view Filament yang benar.
+     *
+     * @return $this
+     */
+    public function configure(): static
+    {
+        return $this->afterCreating(function (\App\Models\Aset $aset) {
+            try {
+                // Menggunakan AsetResource untuk mendapatkan URL View aset yang baru dibuat.
+                $viewUrl = AsetResource::getUrl('view', ['record' => $aset]);
+                $aset->update(['qr_code' => $viewUrl]);
+            } catch (\Exception $e) {
+                // Jika terjadi kegagalan (misalnya rute Filament tidak dimuat), gunakan placeholder yang informatif.
+                $aset->update(['qr_code' => 'factory-url-failed-' . $aset->id]);
+            }
+        });
     }
 }

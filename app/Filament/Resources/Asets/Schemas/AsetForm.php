@@ -7,7 +7,11 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Select;
 use App\Models\Aset;
 use Filament\Schemas\Schema;
-use Filament\Support\RawJs; // Tambahkan ini
+use Filament\Support\RawJs;
+// Tambahan Baru:
+use Filament\Forms\Components\Toggle; 
+use Filament\Forms\Components\DatePicker; 
+// use LaraZeus\Qr\Components\Qr; // HAPUS: Komponen ini menyebabkan masalah penyimpanan JSON ganda
 
 class AsetForm
 {
@@ -17,6 +21,32 @@ class AsetForm
             ->components([
                 TextInput::make('nama_barang')
                     ->required(),
+                
+                // Fitur 1: ATK Switch dan Expired Date
+                Toggle::make('is_atk')
+                    ->label('Apakah ini Barang ATK?')
+                    ->default(false)
+                    ->live(),
+                
+                DatePicker::make('expired_date')
+                    ->label('Expired Date')
+                    ->placeholder('Pilih tanggal kadaluarsa')
+                    // Logic visibilitas ATK tetap sama
+                    ->hidden(fn ($get): bool => !$get('is_atk')), 
+
+                // Fitur 2: Kondisi Barang
+                Select::make('kondisi_barang')
+                    ->label('Kondisi Barang')
+                    ->options([
+                        'Baik' => 'Baik',
+                        'Kurang Baik' => 'Kurang Baik',
+                        'Rusak' => 'Rusak',
+                    ])
+                    ->native(false)
+                    ->default('Baik')
+                    ->required(),
+                
+                // --- Kolom yang sudah ada ---
                 Select::make('lokasi')
                     ->label('Lokasi')
                     ->native(false)
@@ -48,7 +78,8 @@ class AsetForm
                 TextInput::make('nama_vendor')
                     ->label('Nama Vendor')
                     ->nullable(),
-                // Gunakan metode mask() bawaan Filament untuk format Rupiah
+                
+                // Harga
                 TextInput::make('harga')
                     ->label('Harga')
                     ->mask(RawJs::make('$money($input)'))
@@ -56,6 +87,18 @@ class AsetForm
                     ->stripCharacters(['.', ',', 'Rp', ' '])
                     ->numeric()
                     ->required(),
+                
+                // Fitur 3: QR Code (Perbaikan Bug & Menyembunyikan Field)
+                // Mengubah dari Qr::make() ke TextInput::make() dan menyembunyikannya
+                TextInput::make('qr_code')
+                    ->label('QR Code Data')
+                    ->maxLength(255)
+                    ->default(null)
+                    // HANYA FIELD INI YANG HARUS DISIMPAN SEBAGAI DATA QR CODE,
+                    // dan field ini kita sembunyikan sesuai permintaan Anda.
+                    ->hidden(), 
+
+                // Keterangan
                 Textarea::make('keterangan')
                     ->label('Keterangan')
                     ->placeholder('Masukkan detail keterangan aset di sini...')

@@ -5,9 +5,9 @@ namespace App\Filament\Resources\Asets;
 use App\Filament\Resources\Asets\Pages\CreateAset;
 use App\Filament\Resources\Asets\Pages\EditAset;
 use App\Filament\Resources\Asets\Pages\ListAsets;
+use App\Filament\Resources\Asets\Pages\ViewAset; // Wajib diimpor
 use App\Filament\Resources\Asets\Schemas\AsetForm;
 use App\Filament\Resources\Asets\Tables\AsetsTable;
-use Filament\Forms\Components\MarkdownEditor;
 use App\Models\Aset;
 use BackedEnum;
 use UnitEnum;
@@ -29,6 +29,7 @@ class AsetResource extends Resource
 
     public static function form(Schema $schema): Schema
     {
+        // Memanggil skema form dari file AsetForm.php
         return AsetForm::configure($schema);
     }
 
@@ -44,43 +45,40 @@ class AsetResource extends Resource
         ];
     }
 
+    // --- DEFINISI HALAMAN (Wajib mencakup ViewAset) ---
     public static function getPages(): array
     {
         return [
             'index' => ListAsets::route('/'),
             'create' => CreateAset::route('/create'),
             'edit' => EditAset::route('/{record}/edit'),
+            'view' => ViewAset::route('/{record}'), // Rute 'view' ada di sini
         ];
     }
+    // ------------------------------------------
+    
+    // FUNGSI REDIRECT DEFAULT (getUrl) TELAH DIHAPUS (untuk kompatibilitas)
 
-    // Fungsi untuk memeriksa apakah aset dapat dilihat (list table)
     public static function canViewAny(): bool
     {
-        // Semua pengguna yang memiliki permission 'view asets' dapat melihat daftar aset.
         return Auth::user()->can('view asets');
     }
 
-    // Fungsi untuk memeriksa apakah aset dapat dibuat
     public static function canCreate(): bool
     {
         $user = Auth::user();
-        // Hanya Admin dan Approver yang dapat membuat aset
         return $user->hasAnyRole(['admin', 'approver']) && $user->can('create asets');
     }
 
-    // Fungsi untuk memeriksa apakah aset dapat diedit
     public static function canEdit(Model $record): bool
     {
         $user = Auth::user();
-        // Hanya Admin dan Approver yang dapat mengedit aset
         return $user->hasAnyRole(['admin', 'approver']) && $user->can('edit asets');
     }
 
-    // Fungsi untuk memeriksa apakah aset dapat dihapus
     public static function canDelete(Model $record): bool
     {
         $user = Auth::user();
-        // Hanya Admin dan Approver yang dapat menghapus aset
         return $user->hasAnyRole(['admin', 'approver']) && $user->can('delete asets');
     }
 }
