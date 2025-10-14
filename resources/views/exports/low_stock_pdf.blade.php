@@ -95,6 +95,7 @@
                 <th style="width: 25%;">Nama Barang</th>
                 <th style="width: 10%;" class="text-center">Stok Sisa</th>
                 <th style="width: 15%;">Lokasi</th>
+                <th style="width: 60%;">Keterangan</th>
                 <!-- <th style="width: 10%;">Satuan</th> -->
                 <!-- <th style="width: 12%;" class="text-right">Harga Satuan</th>
                 <th style="width: 13%;" class="text-right">Total Nilai</th>
@@ -110,6 +111,7 @@
                         <span class="badge-danger">{{ $item->jumlah_barang }}</span>
                     </td>
                     <td>{{ $item->lokasi }}</td>
+                    <td>{{ $item->keterangan }}</td>
                     <!-- <td>{{ $item->satuan ?? '-' }}</td> -->
                     <!-- <td class="text-right">
                         {{ $item->harga_satuan ? 'Rp ' . number_format($item->harga_satuan, 0, ',', '.') : '-' }}

@@ -2,49 +2,61 @@
 
 namespace App\Filament\Resources\Asets\Tables;
 
+// --- Filament Core Actions (Menggunakan namespace unified Filament\Actions) ---
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
+use Filament\Actions\Action; // <-- Digunakan untuk Header, Record, DAN Column Actions
+use Filament\Actions\ViewAction;
+use Filament\Actions\BulkAction;
+
+// --- Filament Table Components ---
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Columns\IconColumn; // <-- Tambahan untuk Icon Column
 use Filament\Tables\Table;
-use Illuminate\Support\Facades\Auth;
 use Filament\Tables\Filters\Filter;
+use Filament\Tables\Filters\SelectFilter;
+
+// --- Laravel & Database ---
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Database\Eloquent\Builder;
-use Filament\Actions\Action;
-use Filament\Actions\ViewAction; 
-use Filament\Notifications\Notification; 
-use Filament\Tables\Columns\IconColumn; 
-
-// --- Imports untuk Export Excel ---
-use pxlrbt\FilamentExcel\Actions\ExportAction; 
-use pxlrbt\FilamentExcel\Exports\ExcelExport;
-use pxlrbt\FilamentExcel\Columns\Column; 
-
-// --- IMPORTS UNTUK SPATIE PDF (Sesuai permintaan user) ---
-use Spatie\LaravelPdf\Facades\Pdf; 
-use Spatie\LaravelPdf\Enums\Format; 
-use Spatie\Browsershot\Browsershot; 
-
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Response;
 use Illuminate\Support\Facades\Log;
 
-// --- Imports untuk QR Code (Bacon/SVG) ---
-use BaconQrCode\Renderer\Image\SvgImageBackEnd; 
+// --- Aplikasi Lain ---
+use App\Models\Aset;
+use App\Filament\Resources\Asets\AsetResource;
+use Filament\Notifications\Notification;
+use Illuminate\Support\HtmlString;
+
+// --- QR Code Libraries (Bacon/SVG) ---
+use BaconQrCode\Renderer\Image\SvgImageBackEnd;
 use BaconQrCode\Renderer\ImageRenderer;
 use BaconQrCode\Renderer\RendererStyle\RendererStyle;
-use BaconQrCode\Writer; 
-use Illuminate\Support\HtmlString; 
-use App\Models\Aset; 
+use BaconQrCode\Writer;
+
+// --- Export Libraries ---
+use pxlrbt\FilamentExcel\Actions\ExportAction;
+use pxlrbt\FilamentExcel\Exports\ExcelExport;
+use pxlrbt\FilamentExcel\Columns\Column;
+
+// --- IMPORTS UNTUK SPATIE PDF ---
+use Spatie\LaravelPdf\Facades\Pdf;
+use Spatie\LaravelPdf\Enums\Format;
+use Spatie\Browsershot\Browsershot;
 
 class AsetsTable
 {
     /**
      * Fungsi pembantu untuk membuat QR Code SVG.
+     * Fungsi ini DIJAGA karena masih digunakan oleh aksi BulkAction 'export_data_with_qr_pdf'
+     * melalui pemanggilan di Blade view.
      */
-    private static function generateQrCodeSvg(string $data): HtmlString
+    public static function generateQrCodeSvg(string $data, int $size = 150): HtmlString
     {
         $renderer = new ImageRenderer(
-            new RendererStyle(150),
+            new RendererStyle($size), // Menggunakan size yang fleksibel
             new SvgImageBackEnd()
         );
         $writer = new Writer($renderer);
@@ -54,35 +66,50 @@ class AsetsTable
 
     public static function configure(Table $table): Table
     {
+        // Asumsi ini adalah Filament v2 atau v3
         $isAdmin = Auth::user()->hasAnyRole(['admin']);
-        $isAdminOrApprover = Auth::user()->hasAnyRole(['admin', 'approver']); 
+        $isAdminOrApprover = Auth::user()->hasAnyRole(['admin', 'approver']);
 
         return $table
-            ->heading('Manajemen Data Aset') 
+            ->heading('Manajemen Data Aset')
             ->columns([
-                
-                // KOLOM 1: is_atk (Text Column dengan Badge)
-                TextColumn::make('is_atk')
-                    ->label('ATK')
-                    ->badge() 
-                    ->formatStateUsing(fn (bool $state): string => $state ? 'Ya' : 'Tidak')
-                    ->color(fn (bool $state): string => $state ? 'success' : 'warning') 
-                    ->sortable(),
 
-                // KOLOM 2: kondisi_barang
+                // KOLOM 1: Kondisi Barang
                 TextColumn::make('kondisi_barang')
                     ->label('Kondisi')
+                    ->badge()
+                    ->color(fn (string $state): string => match ($state) {
+                        'Baik' => 'success',
+                        'Kurang Baik' => 'warning',
+                        'Rusak' => 'danger',
+                        default => 'secondary',
+                    })
                     ->sortable()
                     ->searchable()
                     ->formatStateUsing(fn ($state) => strtoupper($state)),
+
+                // KOLOM 2: Status ATK
+                TextColumn::make('is_atk')
+                    ->label('ATK')
+                    ->badge()
+                    ->formatStateUsing(fn (bool $state): string => $state ? 'Ya' : 'Tidak')
+                    ->color(fn (bool $state): string => $state ? 'success' : 'warning')
+                    ->sortable(),
 
                 // KOLOM 3: expired_date
                 TextColumn::make('expired_date')
                     ->label('Expired Date')
                     ->date('d/m/Y')
                     ->sortable()
-                    ->placeholder('-'), 
-                    
+                    ->placeholder('-'),
+
+                // KOLOM QR CODE (Data)
+                IconColumn::make('qr_status')
+                    ->label('QR Status')
+                    ->icon(fn (Aset $record): string => empty($record->qr_code) ? 'heroicon-o-x-circle' : 'heroicon-o-check-circle')
+                    ->color(fn (Aset $record): string => empty($record->qr_code) ? 'danger' : 'success')
+                    ->tooltip(fn (Aset $record): string => empty($record->qr_code) ? 'QR Belum Dibuat' : 'QR Tersedia'),
+
                 TextColumn::make('nama_barang')
                     ->sortable()
                     ->searchable()
@@ -92,6 +119,10 @@ class AsetsTable
                     ->numeric()
                     ->searchable()
                     ->sortable(),
+                TextColumn::make('lokasi')
+                    ->sortable()
+                    ->searchable()
+                    ->formatStateUsing(fn ($state) => strtoupper($state)),
                 TextColumn::make('nama_vendor')
                     ->label('Nama Vendor')
                     ->sortable()
@@ -100,10 +131,6 @@ class AsetsTable
                     ->label('Harga')
                     ->money('IDR', locale: 'id')
                     ->sortable(),
-                TextColumn::make('lokasi')
-                    ->sortable()
-                    ->searchable()
-                    ->formatStateUsing(fn ($state) => strtoupper($state)),
                 TextColumn::make('keterangan')
                     ->sortable()
                     ->searchable()
@@ -118,8 +145,8 @@ class AsetsTable
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->headerActions([
-                // --- EXPORT KE EXCEL (XLSX/CSV) ---
-                ExportAction::make('lanjutan_custom') 
+                // Export Excel
+                ExportAction::make('lanjutan_custom')
                     ->label('Ekspor (XLSX/CSV)')
                     ->color('success')
                     ->icon('heroicon-o-arrow-down-tray')
@@ -127,15 +154,11 @@ class AsetsTable
                         ExcelExport::make('aset_export')
                             ->askForWriterType()
                             ->fromTable()
-                            ->withFilename(fn () => 'Laporan Aset_' . now()->format('Ymd_His')) 
+                            ->withFilename(fn () => 'Laporan Aset_' . now()->format('Ymd_His'))
                             ->withColumns([
-                                // Kolom yang disinkronkan ke Excel
-                                Column::make('is_atk')->heading('ATK')
-                                    ->formatStateUsing(fn (bool $state) => $state ? 'Ya' : 'Tidak'), // Format Ya/Tidak di Excel
+                                Column::make('is_atk')->heading('ATK')->formatStateUsing(fn (bool $state) => $state ? 'Ya' : 'Tidak'),
                                 Column::make('kondisi_barang')->heading('KONDISI BARANG'),
-                                Column::make('expired_date')->heading('EXPIRED DATE')
-                                    ->formatStateUsing(fn ($state) => $state ? \Carbon\Carbon::parse($state)->format('d/m/Y') : '-'), // Format Tanggal
-                                    
+                                Column::make('expired_date')->heading('EXPIRED DATE')->formatStateUsing(fn ($state) => $state ? \Carbon\Carbon::parse($state)->format('d/m/Y') : '-'),
                                 Column::make('nama_barang')->heading('NAMA BARANG'),
                                 Column::make('jumlah_barang')->heading('JUMLAH'),
                                 Column::make('nama_vendor')->heading('NAMA VENDOR'),
@@ -145,92 +168,88 @@ class AsetsTable
                                 Column::make('created_at')->heading('TANGGAL DIBUAT'),
                             ]),
                     ])
-                    ->visible(fn () => $isAdminOrApprover), 
-                
-                // --- EXPORT KE PDF (MENGGUNAKAN SPATIE LARAVEL PDF) ---
+                    ->visible(fn () => $isAdminOrApprover),
+
+                // Export PDF (Data Tabular Saja)
                 Action::make('export_pdf')
-                    ->label('Ekspor PDF')
+                    ->label('Ekspor PDF (ALL)')
                     ->color('danger')
                     ->icon('heroicon-o-document-arrow-down')
                     ->visible(fn () => $isAdminOrApprover)
-                    ->action(function (Table $table) use ($isAdminOrApprover) {
-                        // Ambil query dari table saat ini (termasuk filter)
+                    ->action(function (Table $table) {
                         $query = $table->getLivewire()->getFilteredTableQuery();
 
                         try {
                             $records = (clone $query)->get();
-                            
+
                             if ($records->isEmpty()) {
-                                Notification::make()
-                                    ->warning()
-                                    ->title('Tidak ada data')
-                                    ->body('Tidak ada data aset untuk diekspor.')
-                                    ->send();
+                                Notification::make()->warning()->title('Tidak ada data')->body('Tidak ada data aset untuk diekspor.')->send();
                                 return;
                             }
-                            
+
                             $filename = 'Laporan_Aset_' . now()->format('Ymd_His') . '.pdf';
                             $path = storage_path('app/public/' . $filename);
-                            
-                            // Menggunakan Spatie\LaravelPdf untuk render
+
                             Pdf::view('exports.aset_laporan_pdf', [
                                 'data' => $records,
                                 'title' => 'Laporan Data Aset Keseluruhan',
                             ])
-                            ->format(Format::A4) // Menggunakan Enum Spatie
-                            ->landscape() 
+                            ->format(Format::A4)
+                            ->landscape()
                             ->save($path);
-                            
-                            // Download file dan hapus setelah selesai
+
                             return Response::download($path, $filename)->deleteFileAfterSend(true);
-                            
+
                         } catch (\Exception $e) {
-                            Log::error('PDF Export Error: ' . $e->getMessage(), [
-                                'exception' => $e,
-                                'trace' => $e->getTraceAsString()
-                            ]);
-                            
+                            Log::error('PDF Export Error: ' . $e->getMessage(), ['exception' => $e]);
                             Notification::make()
                                 ->danger()
                                 ->title('Gagal mengekspor PDF')
-                                ->body('Error: ' . $e->getMessage() . '. Silakan periksa log untuk detail.')
+                                ->body('Error: ' . $e->getMessage() . '. Pastikan semua dependensi PDF terinstal.')
                                 ->persistent()
                                 ->send();
-                            
                             return null;
                         }
                     }),
             ])
             ->recordActions([
-                // Aksi default
-                ViewAction::make(), 
+                ViewAction::make(),
                 EditAction::make()->visible(fn () => $isAdmin),
-                
-                // --- AKSI TAMPILKAN QR CODE ---
-                Action::make('show_qr_code')
-                    ->label('QR Code')
-                    ->icon('heroicon-o-qr-code')
-                    ->color('gray')
-                    ->modalHeading(fn (Aset $record) => 'QR Code: ' . $record->nama_barang)
-                    ->modalContent(function (Aset $record) {
-                        if (empty($record->qr_code)) {
-                            return new HtmlString('<div class="text-center p-4">QR Code belum dibuat.</div>');
-                        }
-                        $svg = self::generateQrCodeSvg($record->qr_code);
-                        return new HtmlString('<div class="flex flex-col items-center justify-center p-4">
-                            <h3 class="text-lg font-semibold mb-2">Pindai untuk melihat detail aset</h3>
-                            ' . $svg . '
-                            <p class="text-sm mt-2 text-gray-500 break-all w-full text-center">Data: ' . $record->qr_code . '</p>
-                        </div>');
-                    })
-                    ->visible(fn (Aset $record) => !empty($record->qr_code)),
+
+                // Aksi Cetak QR Satuan dan tampilkan modal QR Dihapus!
+
             ])
             ->filters([
+                // Filter 1: Kondisi Barang
+                SelectFilter::make('kondisi_barang')
+                    ->label('Filter Kondisi')
+                    ->options([
+                        'Baik' => 'Baik',
+                        'Kurang Baik' => 'Kurang Baik',
+                        'Rusak' => 'Rusak',
+                    ]),
+
+                // Filter 2: Status ATK
+                SelectFilter::make('is_atk')
+                    ->label('Filter ATK')
+                    ->options([
+                        true => 'Ya (ATK)',
+                        false => 'Bukan (Non-ATK)',
+                    ])
+                    ->query(function (Builder $query, array $data): Builder {
+                        if (isset($data['value']) && in_array($data['value'], ['1', '0'])) {
+                            $isAtk = $data['value'] === '1';
+                            return $query->where('is_atk', $isAtk);
+                        }
+                        return $query;
+                    }),
+
+                // Filter 3: Lokasi
                 Filter::make('lokasi')
                     ->label('Lokasi')
                     ->form([
                         \Filament\Forms\Components\Select::make('lokasi')
-                            ->options(fn () => Aset::query() 
+                            ->options(fn () => Aset::query()
                                 ->whereNotNull('lokasi')
                                 ->distinct()
                                 ->pluck('lokasi', 'lokasi')
@@ -243,11 +262,13 @@ class AsetsTable
                             ? $query->where('lokasi', $data['lokasi'])
                             : $query;
                     }),
+
+                // Filter 4: Nama Vendor
                 Filter::make('nama_vendor')
                     ->label('Nama Vendor')
                     ->form([
                         \Filament\Forms\Components\Select::make('nama_vendor')
-                            ->options(fn () => Aset::query() 
+                            ->options(fn () => Aset::query()
                                 ->whereNotNull('nama_vendor')
                                 ->distinct()
                                 ->pluck('nama_vendor', 'nama_vendor')
@@ -261,10 +282,60 @@ class AsetsTable
                             : $query;
                     }),
             ])
-            ->toolbarActions([
-                BulkActionGroup::make([
-                    DeleteBulkAction::make()->visible(fn () => $isAdmin),
-                ]),
+            ->bulkActions([
+                DeleteBulkAction::make(),
+
+                // Aksi Cetak Label QR Massal Dihapus!
+
+                // NEW: Aksi Ekspor PDF (Data + QR Code) - Dijaga karena ini yang fungsional
+                BulkAction::make('export_data_with_qr_pdf')
+                    ->label('Ekspor PDF (Data + QR Code)')
+                    ->icon('heroicon-o-document-check')
+                    ->color('success') // Ganti warna agar beda dengan tabular PDF
+                    ->action(function (Collection $records) {
+                        if ($records->isEmpty()) {
+                            Notification::make()->warning()->title('Pilih Aset')->body('Harap pilih minimal satu aset untuk diekspor.')->send();
+                            return;
+                        }
+
+                        // Hapus record yang tidak memiliki QR Code
+                        $records = $records->filter(fn ($record) => !empty($record->qr_code));
+
+                        if ($records->isEmpty()) {
+                            Notification::make()->warning()->title('Gagal Ekspor')->body('Semua aset yang dipilih tidak memiliki QR Code yang tersedia.')->send();
+                            return;
+                        }
+
+                        $filename = 'Laporan_Aset_QR_Batch_' . now()->format('Ymd_His') . '.pdf';
+                        $path = storage_path('app/public/' . $filename);
+
+                        try {
+                            Pdf::view('exports.aset_qr_batch_pdf', [ // MENGGUNAKAN VIEW BARU
+                                'data' => $records,
+                                'title' => 'Laporan Aset Terpilih dengan QR Code',
+                                // Pass callable function untuk digunakan di Blade
+                                'generateQrCodeSvg' => [self::class, 'generateQrCodeSvg'],
+                                'AsetResource' => AsetResource::class,
+                            ])
+                            ->format(Format::A4)
+                            ->landscape()
+                            ->save($path);
+
+                            return Response::download($path, $filename)->deleteFileAfterSend(true);
+
+                        } catch (\Exception $e) {
+                            Log::error('PDF QR Export Error: ' . $e->getMessage(), ['exception' => $e]);
+                            Notification::make()
+                                ->danger()
+                                ->title('Gagal mengekspor PDF QR')
+                                ->body('Terjadi kesalahan saat membuat PDF: ' . $e->getMessage())
+                                ->persistent()
+                                ->send();
+                            return null;
+                        }
+                    })
+                    ->visible(fn () => $isAdminOrApprover),
+
             ]);
     }
 }

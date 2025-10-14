@@ -65,6 +65,11 @@ class LowStockWidget extends BaseWidget
                     ->searchable()
                     ->sortable()
                     ->visible($isAdminOrApprover),
+                TextColumn::make('keterangan')
+                    ->label('Keterangan')
+                    ->searchable()
+                    ->sortable()
+                    ->visible($isAdminOrApprover),
             ])
             ->filters([
                 SelectFilter::make('lokasi')
