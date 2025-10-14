@@ -1,8 +1,9 @@
 <?php
 
-namespace App\Filament\Resources\PengajuanPinjaman\Tables;
+namespace App\Filament\Resources\PermintaanBarang\Tables;
 
 use App\Models\Aset;
+use App\Models\RiwayatAset;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Filament\Actions\Action;
@@ -15,11 +16,10 @@ use Carbon\Carbon;
 use Filament\Notifications\Notification;
 use Filament\Tables\Filters\Filter;
 use Illuminate\Support\Facades\DB;
-use App\Models\RiwayatAset;
 use Filament\Forms\Components\TextInput; 
-use Illuminate\Database\Eloquent\Builder; // Import untuk Builder
+use Illuminate\Database\Eloquent\Builder; 
 
-class PengajuanPinjamanTable
+class PermintaanBarangTable
 {
     public static function configure(Table $table): Table
     {
@@ -28,31 +28,31 @@ class PengajuanPinjamanTable
 
         return $table
             // PERUBAHAN KRITIS: Memodifikasi query utama untuk hanya menampilkan
-            // pengajuan yang terkait dengan aset yang BUKAN ATK (is_atk != 1).
+            // pengajuan yang terkait dengan aset yang KHUSUS ATK (is_atk = 1).
             ->modifyQueryUsing(function (Builder $query) {
-                // Memastikan aset terkait memiliki is_atk != 1 (BUKAN ATK)
+                // Memastikan aset terkait memiliki is_atk = 1 (ATK)
                 $query->whereHas('aset', function (Builder $subQuery) {
-                    $subQuery->where('is_atk', '!=', 1); // Diperbarui sesuai saran Anda
+                    $subQuery->where('is_atk', 1);
                 });
             })
             ->columns([
                 TextColumn::make('user.name')
-                    ->label('Nama Peminjam')
+                    ->label('Nama Pemohon')
                     ->searchable()
                     ->sortable(),
                 TextColumn::make('aset.nama_barang')
-                    ->label('Nama Barang')
+                    ->label('Nama Barang (ATK)')
                     ->sortable()
                     ->searchable(),
                 
                 TextColumn::make('jumlah_pinjam')
-                    ->label('Jumlah Pinjam')
+                    ->label('Jumlah Permintaan')
                     ->numeric()
                     ->sortable(),
                 
-                // KOLOM BARU: Jumlah yang Dikembalikan
+                // Menggunakan kolom 'jumlah_dikembalikan' untuk menyimpan jumlah yang dikeluarkan
                 TextColumn::make('jumlah_dikembalikan')
-                    ->label('Jml Dikembalikan')
+                    ->label('Jml Dikeluarkan')
                     ->numeric()
                     ->sortable()
                     ->placeholder('0'), 
@@ -73,7 +73,8 @@ class PengajuanPinjamanTable
                         'diajukan' => 'warning',
                         'disetujui' => 'success',
                         'ditolak' => 'danger',
-                        'dikembalikan' => 'info',
+                        // PERUBAHAN STATUS: Ganti 'dikeluarkan' dengan 'dikeluarkan' untuk menghindari error truncation
+                        'dikeluarkan' => 'info', 
                         default => 'gray',
                     })
                     ->sortable(),
@@ -94,14 +95,14 @@ class PengajuanPinjamanTable
             ->defaultSort('created_at', 'desc')
             ->filters([
                 Filter::make('my_pengajuan')
-                    ->label('Pengajuan Saya')
+                    ->label('Permintaan Saya')
                     ->query(fn ($query) => $isAdmin ? $query : $query->where('user_id', $currentUserId))
                     ->visible(fn () => !$isAdmin), 
             ])
             ->actions([
-                // Aksi 'Setujui' 
+                // Aksi 'Setujui' (Mengurangi stok ATK)
                 Action::make('setujui')
-                    ->label('Setujui')
+                    ->label('Setujui & Keluarkan Barang')
                     ->icon('heroicon-o-check-circle')
                     ->color('success')
                     ->visible(fn ($record) => $record->status === 'diajukan' && $isAdmin)
@@ -111,7 +112,7 @@ class PengajuanPinjamanTable
                             $aset = Aset::find($record->aset_id);
                             
                             if (!$aset) {
-                                Notification::make()->title('Error')->body('Aset tidak ditemukan.')->danger()->send();
+                                Notification::make()->title('Error')->body('Aset (ATK) tidak ditemukan.')->danger()->send();
                                 return;
                             }
                             
@@ -130,7 +131,7 @@ class PengajuanPinjamanTable
                             }
                             
                             $lokasiGudang = $aset->lokasi; 
-                            $peminjamNama = $record->user?->name ?? 'Peminjam';
+                            $peminjamNama = $record->user?->name ?? 'Pemohon';
                             
                             $stokSesudah = $stokSebelum - $jumlahPinjam;
 
@@ -153,28 +154,30 @@ class PengajuanPinjamanTable
 
                             // 2. Update record pengajuan
                             $record->forceFill([
-                                'status' => 'disetujui',
+                                // PERUBAHAN STATUS: Mengganti menjadi 'dikeluarkan'
+                                'status' => 'dikeluarkan', 
                                 'tanggal_approval' => Carbon::now()->setTimezone(config('app.timezone')),
                                 'admin_id' => Auth::id(),
+                                'jumlah_dikembalikan' => $jumlahPinjam, // Jumlah yang dikeluarkan
                                 'lokasi_sebelum' => $lokasiGudang, 
                             ])->saveQuietly();
                             
-                            // 3. Catat riwayat PINJAM DISETUJUI
+                            // 3. Catat riwayat PENGELUARAN BARANG ATK
                             RiwayatAset::create([
                                 'aset_id' => $aset->id,
                                 'user_id' => Auth::id(),
-                                'tipe' => 'pinjam_disetujui',
+                                'tipe' => 'permintaan_atk_dikeluarkan', // Update tipe riwayat
                                 'jumlah_perubahan' => -$jumlahPinjam,
                                 'stok_sebelum' => $stokSebelum,
                                 'stok_sesudah' => $stokSesudah,
                                 'lokasi_sebelum' => $lokasiGudang, 
-                                'lokasi_sesudah' => $peminjamNama, 
-                                'keterangan' => 'Disetujui dan dipinjam oleh ' . $peminjamNama,
+                                'lokasi_sesudah' => $peminjamNama . ' (Diterima)', 
+                                'keterangan' => 'Permintaan ATK disetujui dan dikeluarkan untuk ' . $peminjamNama,
                             ]);
                             
                             Notification::make()
-                                ->title('Pengajuan Disetujui')
-                                ->body("Pengajuan pinjaman {$aset->nama_barang} telah disetujui. Stok tersisa: {$stokSesudah}")
+                                ->title('Permintaan ATK dikeluarkan')
+                                ->body("Permintaan {$aset->nama_barang} telah disetujui dan barang dikeluarkan. Stok tersisa: {$stokSesudah}")
                                 ->success()
                                 ->send();
                         });
@@ -194,104 +197,14 @@ class PengajuanPinjamanTable
                         ]);
 
                         Notification::make()
-                            ->title('Pengajuan Ditolak')
-                            ->body('Pengajuan berhasil ditolak.')
+                            ->title('Permintaan Ditolak')
+                            ->body('Permintaan berhasil ditolak.')
                             ->danger()
                             ->send();
                     }),
 
-                // AKSI 'DIKEMBALIKAN' DENGAN MODAL HANYA JUMLAH
-                Action::make('dikembalikan')
-                    ->label('Dikembalikan')
-                    ->icon('heroicon-o-arrow-uturn-left')
-                    ->color('info')
-                    ->visible(fn ($record) => $record->status === 'disetujui' && $isAdmin)
-                    ->modalHeading('Pengembalian Aset')
-                    ->modalDescription('Masukkan jumlah unit yang dikembalikan oleh peminjam.')
-                    ->fillForm(function ($record) {
-                        // Hitung sisa yang belum dikembalikan
-                        $sisaBelumDikembalikan = $record->jumlah_pinjam - ($record->jumlah_dikembalikan ?? 0);
-                        return ['jumlah_dikembalikan_saat_ini' => $sisaBelumDikembalikan]; 
-                    })
-                    ->form([
-                        // Field: Jumlah yang Dikembalikan
-                        TextInput::make('jumlah_dikembalikan_saat_ini')
-                            ->label('Jumlah yang Dikembalikan Sekarang')
-                            ->numeric()
-                            ->required()
-                            ->minValue(1)
-                            // Batasi maksimal sejumlah sisa pinjaman yang belum dikembalikan
-                            ->maxValue(fn ($record) => $record->jumlah_pinjam - ($record->jumlah_dikembalikan ?? 0)) 
-                            ->hint(fn ($record) => "Maksimal sisa pinjaman: " . ($record->jumlah_pinjam - ($record->jumlah_dikembalikan ?? 0)) . " unit"),
-                    ])
-                    ->action(function (array $data, $record) { 
-                        
-                        $jumlahDikembalikan = (int) $data['jumlah_dikembalikan_saat_ini'];
-                        
-                        DB::transaction(function () use ($record, $jumlahDikembalikan) {
-                            $aset = Aset::find($record->aset_id);
-
-                            if (!$aset) {
-                                Notification::make()->title('Error')->body('Aset tidak ditemukan.')->danger()->send();
-                                return;
-                            }
-                            $aset->lockForUpdate();
-
-                            $lokasiGudang = $record->lokasi_sebelum ?? $aset->lokasi; 
-                            $peminjamNama = $record->user?->name ?? 'Peminjam';
-                            
-                            $stokSebelum = $aset->jumlah_barang;
-                            $stokSesudah = $stokSebelum + $jumlahDikembalikan; // Tambah stok
-                            
-                            // Hitung sisa pinjaman setelah pengembalian ini
-                            $sisaPinjam = $record->jumlah_pinjam - ($record->jumlah_dikembalikan ?? 0) - $jumlahDikembalikan;
-
-                            // 1. RAW UPDATE STOK
-                            $updated = DB::table('asets')
-                                ->where('id', $aset->id)
-                                ->where('jumlah_barang', $stokSebelum) 
-                                ->update([
-                                    'jumlah_barang' => $stokSesudah,
-                                ]);
-
-                            if (!$updated) {
-                                Notification::make()
-                                    ->title('Gagal Pengembalian')
-                                    ->body('Terjadi masalah konsistensi data (Race Condition). Stok tidak dapat dikembalikan.')
-                                    ->danger()
-                                    ->send();
-                                return;
-                            }
-                            
-                            // 2. Update record pengajuan
-                            $record->forceFill([
-                                // Jika sisa pinjam 0, status menjadi 'dikembalikan'. Jika > 0, status tetap 'disetujui' (Partial Return)
-                                'status' => $sisaPinjam <= 0 ? 'dikembalikan' : 'disetujui',
-                                'tanggal_approval' => Carbon::now()->setTimezone(config('app.timezone')),
-                                'jumlah_dikembalikan' => ($record->jumlah_dikembalikan ?? 0) + $jumlahDikembalikan, // Kumulatif
-                            ])->saveQuietly();
-
-                            // 3. Catat riwayat PINJAM DIKEMBALIKAN 
-                            RiwayatAset::create([
-                                'aset_id' => $aset->id,
-                                'user_id' => Auth::id(),
-                                'tipe' => 'pinjam_dikembalikan',
-                                'jumlah_perubahan' => $jumlahDikembalikan, 
-                                'stok_sebelum' => $stokSebelum,
-                                'stok_sesudah' => $stokSesudah,
-                                'lokasi_sebelum' => $peminjamNama, 
-                                'lokasi_sesudah' => $lokasiGudang, 
-                                'keterangan' => "Pengembalian parsial aset oleh {$peminjamNama}. Jumlah: {$jumlahDikembalikan} unit.",
-                            ]);
-
-                            Notification::make()
-                                ->title('Barang Dikembalikan')
-                                ->body("Barang {$aset->nama_barang} sebanyak {$jumlahDikembalikan} unit telah dikembalikan. Sisa pinjaman: " . max(0, $sisaPinjam) . " unit.")
-                                ->success()
-                                ->send();
-                        });
-                    }),
-
+                // AKSI 'DIKEMBALIKAN' DIHILANGKAN (sesuai kebutuhan ATK)
+                
                 EditAction::make()->visible(fn ($record) => $isAdmin || ($record->status === 'diajukan' && $record->user_id === $currentUserId)),
                 
                 DeleteAction::make()->visible(fn () => $isAdmin),

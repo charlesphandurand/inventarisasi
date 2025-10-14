@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Filament\Resources\PengajuanPinjaman\Schemas;
+namespace App\Filament\Resources\PermintaanBarang\Schemas;
 
 use App\Models\Aset;
 use Filament\Forms\Components\Select;
@@ -12,19 +12,19 @@ use Illuminate\Support\Facades\Auth;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
 
-class PengajuanPinjamanForm
+class PermintaanBarangForm
 {
     public static function configure(Schema $schema): Schema
     {
         return $schema
             ->schema([
                 Select::make('aset_id')
-                    ->label('Nama Aset')
+                    ->label('Nama Barang (ATK)')
                     ->options(
                         Aset::query()
                             ->whereNotNull('nama_barang')
-                            // INI FILTER UNTUK MENGHILANGKAN ASET BERSTATUS ATK (1)
-                            ->where('is_atk', '!=', 1) 
+                            // INI FILTER UNTUK HANYA MENAMPILKAN ASET BERSTATUS ATK (1)
+                            ->where('is_atk', 1) 
                             ->get()
                             ->mapWithKeys(function ($aset) {
                                 $lokasi = $aset->lokasi ?: 'Tanpa Lokasi';
@@ -42,13 +42,15 @@ class PengajuanPinjamanForm
                         'diajukan' => 'Diajukan',
                         'disetujui' => 'Disetujui',
                         'ditolak' => 'Ditolak',
-                        'dikembalikan' => 'Dikembalikan',
+                        // Status 'dikembalikan' di sini berarti sudah disetujui & dikeluarkan (Selesai)
+                        'dikembalikan' => 'Dikeluarkan', 
                     ])
                     ->default('diajukan')
                     ->visible(fn ($livewire) => $livewire instanceof EditRecord && Auth::user()?->hasAnyRole(['approver']))
                     ->required()
                     ->afterStateUpdated(function ($state, callable $set, Get $get) {
-                        if ($state === 'disetujui') {
+                        // Logika untuk mencegah approval jika stok kurang
+                        if ($state === 'disetujui' || $state === 'dikembalikan') {
                             $aset = Aset::find($get('aset_id'));
                             $jumlah = (int) $get('jumlah_pinjam');
                             $stok = (int) ($aset->jumlah_barang ?? 0);
@@ -56,16 +58,16 @@ class PengajuanPinjamanForm
                             if ($aset && $jumlah > $stok) {
                                 Notification::make()
                                     ->title('Gagal Disetujui')
-                                    ->body("Stok saat ini hanya {$stok}. Jumlah pinjaman ({$jumlah}) melebihi stok yang tersedia.")
+                                    ->body("Stok saat ini hanya {$stok}. Jumlah permintaan ({$jumlah}) melebihi stok yang tersedia.")
                                     ->danger()
                                     ->send();
-                                $set('status', 'diajukan');
+                                $set('status', 'diajukan'); // Kembalikan ke diajukan
                             }
                         }
                     }),
 
                 TextInput::make('jumlah_pinjam')
-                    ->label('Jumlah Pinjam')
+                    ->label('Jumlah Permintaan')
                     ->required()
                     ->numeric()
                     ->minValue(1)
@@ -81,7 +83,7 @@ class PengajuanPinjamanForm
                                 $jumlahPinjam = (int) $value;
 
                                 if ($jumlahPinjam > $stok) {
-                                    $fail("Jumlah pinjam ($jumlahPinjam) melebihi stok tersedia ($stok).");
+                                    $fail("Jumlah permintaan ($jumlahPinjam) melebihi stok tersedia ($stok).");
                                     
                                     Notification::make()
                                         ->title('Jumlah Melebihi Stok')
@@ -95,13 +97,13 @@ class PengajuanPinjamanForm
 
                 // Placeholder Informasi Stok dengan format Markdown yang lebih rapi
                 Placeholder::make('live_stock_info')
-                    ->label('Informasi Stok Aset Terpilih')
+                    ->label('Informasi Stok ATK Terpilih')
                     ->content(function (Get $get) {
                         $asetId = $get('aset_id');
                         $jumlahPinjam = (int) $get('jumlah_pinjam');
                         
                         if (!$asetId) {
-                            return 'Pilih aset untuk melihat detail stok dan lokasi.';
+                            return 'Pilih barang (ATK) untuk melihat detail stok dan lokasi.';
                         }
                         
                         $aset = Aset::find($asetId);
@@ -113,13 +115,13 @@ class PengajuanPinjamanForm
                         $lokasi = $aset->lokasi ?: 'Tanpa Lokasi';
                         $sisaStok = $stokTersedia - $jumlahPinjam;
                         
-                        $info = "**📦 {$aset->nama_barang}**\n\n";
-                        $info .= "- 📍 **Lokasi:** {$lokasi}\n";
+                        $info = "**📦 {$aset->nama_barang} (ATK)**\n\n";
+                        $info .= "- 📍 **Lokasi Penyimpanan:** {$lokasi}\n";
                         $info .= "- 📊 **Stok Tersedia:** {$stokTersedia} unit\n";
                         
                         if ($jumlahPinjam > 0) {
                             $status = $sisaStok >= 0 ? 'CUKUP' : 'TIDAK CUKUP';
-                            $info .= "- 📋 **Sisa Setelah Dipinjam:** {$sisaStok} unit (**{$status}**)";
+                            $info .= "- 📋 **Sisa Setelah Diminta:** {$sisaStok} unit (**{$status}**)";
                         }
                         
                         return $info;

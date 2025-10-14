@@ -12,8 +12,9 @@ return new class extends Migration
      */
     public function up(): void
     {
-        // Update enum values untuk status di pengajuan_pinjaman
-        DB::statement("ALTER TABLE pengajuan_pinjaman MODIFY COLUMN status ENUM('diajukan', 'disetujui', 'ditolak', 'dikembalikan') DEFAULT 'diajukan'");
+        // PERBAIKAN TOTAL: Menambahkan 'dikeluarkan' ke daftar ENUM.
+        // Ini memastikan semua status yang digunakan di aplikasi sudah valid di database.
+        DB::statement("ALTER TABLE pengajuan_pinjaman MODIFY COLUMN status ENUM('diajukan', 'disetujui', 'ditolak', 'dikembalikan', 'dikeluarkan') DEFAULT 'diajukan'");
     }
 
     /**
@@ -21,7 +22,7 @@ return new class extends Migration
      */
     public function down(): void
     {
-        // Kembalikan ke enum values sebelumnya
-        DB::statement("ALTER TABLE pengajuan_pinjaman MODIFY COLUMN status ENUM('diajukan', 'disetujui', 'ditolak') DEFAULT 'diajukan'");
+        // Mengembalikan ENUM ke daftar sebelum penambahan ini
+        DB::statement("ALTER TABLE pengajuan_pinjaman MODIFY COLUMN status ENUM('diajukan', 'disetujui', 'ditolak', 'dikembalikan') DEFAULT 'diajukan'");
     }
 };

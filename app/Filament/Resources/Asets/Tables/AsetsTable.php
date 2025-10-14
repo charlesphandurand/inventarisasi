@@ -49,6 +49,27 @@ use Spatie\Browsershot\Browsershot;
 class AsetsTable
 {
     /**
+     * Daftar Kolom yang tersedia untuk diekspor (digunakan oleh form BulkAction PDF QR).
+     */
+    protected static function getExportableColumns(): array
+    {
+        // Sesuaikan key (nama atribut Model) dan value (label tampilan) di sini
+        return [
+            'kode_aset' => 'Kode Aset',
+            'nama_barang' => 'Nama Barang',
+            'kondisi_barang' => 'Kondisi Aset',
+            'jumlah_barang' => 'Jumlah',
+            'lokasi' => 'Lokasi Penempatan',
+            'harga' => 'Harga Beli',
+            'expired_date' => 'Expired Date',
+            'is_atk' => 'ATK/Non-ATK',
+            'nama_vendor' => 'Nama Vendor',
+            'created_at' => 'Tanggal Pembelian/Input',
+            'keterangan' => 'Keterangan',
+        ];
+    }
+
+    /**
      * Fungsi pembantu untuk membuat QR Code SVG.
      * Fungsi ini DIJAGA karena masih digunakan oleh aksi BulkAction 'export_data_with_qr_pdf'
      * melalui pemanggilan di Blade view.
@@ -214,7 +235,9 @@ class AsetsTable
             ])
             ->recordActions([
                 ViewAction::make(),
-                EditAction::make()->visible(fn () => $isAdmin),
+                // PERBAIKAN: Mengganti $isAdmin dengan $isAdminOrApprover
+                // Ini akan memungkinkan pengguna dengan peran 'admin' ATAU 'approver' untuk melihat dan menggunakan tombol Edit.
+                EditAction::make()->visible(fn () => $isAdminOrApprover), 
 
                 // Aksi Cetak QR Satuan dan tampilkan modal QR Dihapus!
 
@@ -283,59 +306,59 @@ class AsetsTable
                     }),
             ])
             ->bulkActions([
-                DeleteBulkAction::make(),
+                // Membungkus Bulk Actions agar tombolnya terlihat
+                BulkActionGroup::make([
+                    DeleteBulkAction::make(),
+                    // NEW: Aksi Ekspor PDF (Data + QR Code) - Dijaga karena ini yang fungsional
+                    BulkAction::make('export_data_with_qr_pdf')
+                        ->label('Ekspor PDF (Data + QR Code)')
+                        ->icon('heroicon-o-document-check')
+                        ->color('success') // Ganti warna agar beda dengan tabular PDF
+                        ->action(function (Collection $records) {
+                            if ($records->isEmpty()) {
+                                Notification::make()->warning()->title('Pilih Aset')->body('Harap pilih minimal satu aset untuk diekspor.')->send();
+                                return;
+                            }
 
-                // Aksi Cetak Label QR Massal Dihapus!
+                            // Hapus record yang tidak memiliki QR Code
+                            $records = $records->filter(fn ($record) => !empty($record->qr_code));
 
-                // NEW: Aksi Ekspor PDF (Data + QR Code) - Dijaga karena ini yang fungsional
-                BulkAction::make('export_data_with_qr_pdf')
-                    ->label('Ekspor PDF (Data + QR Code)')
-                    ->icon('heroicon-o-document-check')
-                    ->color('success') // Ganti warna agar beda dengan tabular PDF
-                    ->action(function (Collection $records) {
-                        if ($records->isEmpty()) {
-                            Notification::make()->warning()->title('Pilih Aset')->body('Harap pilih minimal satu aset untuk diekspor.')->send();
-                            return;
-                        }
+                            if ($records->isEmpty()) {
+                                Notification::make()->warning()->title('Gagal Ekspor')->body('Semua aset yang dipilih tidak memiliki QR Code yang tersedia.')->send();
+                                return;
+                            }
 
-                        // Hapus record yang tidak memiliki QR Code
-                        $records = $records->filter(fn ($record) => !empty($record->qr_code));
+                            $filename = 'Laporan_Aset_QR_Batch_' . now()->format('Ymd_His') . '.pdf';
+                            $path = storage_path('app/public/' . $filename);
 
-                        if ($records->isEmpty()) {
-                            Notification::make()->warning()->title('Gagal Ekspor')->body('Semua aset yang dipilih tidak memiliki QR Code yang tersedia.')->send();
-                            return;
-                        }
+                            try {
+                                Pdf::view('exports.aset_qr_batch_pdf', [ // MENGGUNAKAN VIEW BARU
+                                    'data' => $records,
+                                    'title' => 'Laporan Aset Terpilih dengan QR Code',
+                                    // Pass callable function untuk digunakan di Blade
+                                    'generateQrCodeSvg' => [self::class, 'generateQrCodeSvg'],
+                                    'AsetResource' => AsetResource::class,
+                                ])
+                                ->format(Format::A4)
+                                ->landscape()
+                                ->save($path);
 
-                        $filename = 'Laporan_Aset_QR_Batch_' . now()->format('Ymd_His') . '.pdf';
-                        $path = storage_path('app/public/' . $filename);
+                                return Response::download($path, $filename)->deleteFileAfterSend(true);
 
-                        try {
-                            Pdf::view('exports.aset_qr_batch_pdf', [ // MENGGUNAKAN VIEW BARU
-                                'data' => $records,
-                                'title' => 'Laporan Aset Terpilih dengan QR Code',
-                                // Pass callable function untuk digunakan di Blade
-                                'generateQrCodeSvg' => [self::class, 'generateQrCodeSvg'],
-                                'AsetResource' => AsetResource::class,
-                            ])
-                            ->format(Format::A4)
-                            ->landscape()
-                            ->save($path);
-
-                            return Response::download($path, $filename)->deleteFileAfterSend(true);
-
-                        } catch (\Exception $e) {
-                            Log::error('PDF QR Export Error: ' . $e->getMessage(), ['exception' => $e]);
-                            Notification::make()
-                                ->danger()
-                                ->title('Gagal mengekspor PDF QR')
-                                ->body('Terjadi kesalahan saat membuat PDF: ' . $e->getMessage())
-                                ->persistent()
-                                ->send();
-                            return null;
-                        }
-                    })
-                    ->visible(fn () => $isAdminOrApprover),
-
+                            } catch (\Exception $e) {
+                                Log::error('PDF QR Export Error: ' . $e->getMessage(), ['exception' => $e]);
+                                Notification::make()
+                                    ->danger()
+                                    ->title('Gagal mengekspor PDF QR')
+                                    ->body('Terjadi kesalahan saat membuat PDF: ' . $e->getMessage())
+                                    ->persistent()
+                                    ->send();
+                                return null;
+                            }
+                        })
+                        ->visible(fn () => $isAdminOrApprover) // Batasi juga BulkAction ini
+                        ->deselectRecordsAfterCompletion(),
+                ])
             ]);
     }
 }

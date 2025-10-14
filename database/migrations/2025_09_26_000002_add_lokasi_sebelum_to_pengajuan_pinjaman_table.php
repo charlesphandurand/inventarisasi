@@ -12,7 +12,11 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('pengajuan_pinjaman', function (Blueprint $table) {
+            // Kolom dari migrasi Anda sebelumnya
             $table->string('lokasi_sebelum')->nullable()->after('aset_id');
+
+            // Kolom baru yang dibutuhkan untuk melacak pengembalian parsial (memperbaiki error SQL)
+            $table->unsignedInteger('jumlah_dikembalikan')->default(0)->after('jumlah_pinjam');
         });
     }
 
@@ -23,8 +27,7 @@ return new class extends Migration
     {
         Schema::table('pengajuan_pinjaman', function (Blueprint $table) {
             $table->dropColumn('lokasi_sebelum');
+            $table->dropColumn('jumlah_dikembalikan');
         });
     }
 };
-
-

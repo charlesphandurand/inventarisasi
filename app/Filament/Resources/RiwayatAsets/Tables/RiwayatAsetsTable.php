@@ -21,7 +21,7 @@ class RiwayatAsetsTable
                     ->searchable()
                     ->sortable(),
                 TextColumn::make('tipe')
-                    ->label('Tipe')
+                    ->label('Tipe Transaksi')
                     ->badge()
                     ->color(fn (string $state): string => match ($state) {
                         'pinjam_dikembalikan' => 'warning',
@@ -32,11 +32,13 @@ class RiwayatAsetsTable
                         'pinjam_dihapus' => 'danger',
                         'penambahan' => 'success',
                         'pengurangan' => 'danger',
+                        // Menambahkan status baru untuk Permintaan ATK
+                        'permintaan_atk_dikeluarkan' => 'success', 
                         default => 'gray',
                     })
                     ->sortable(),
                 TextColumn::make('jumlah_perubahan')
-                    ->label('Stok')
+                    ->label('Perubahan Stok')
                     ->numeric(),
                 TextColumn::make('stok_sebelum')
                     ->label('Stok Sebelum')
@@ -46,10 +48,12 @@ class RiwayatAsetsTable
                     ->numeric(),
                 TextColumn::make('harga_sebelum')
                     ->label('Harga Sebelum')
-                    ->money('IDR', locale: 'id'),
+                    ->money('IDR', locale: 'id')
+                    ->toggleable(isToggledHiddenByDefault: true), // Sembunyikan secara default
                 TextColumn::make('harga_sesudah')
                     ->label('Harga Sesudah')
-                    ->money('IDR', locale: 'id'),
+                    ->money('IDR', locale: 'id')
+                    ->toggleable(isToggledHiddenByDefault: true), // Sembunyikan secara default
                 TextColumn::make('lokasi_sebelum')
                     ->label('Lokasi Sebelumnya'),
                 TextColumn::make('lokasi_sesudah')
@@ -65,20 +69,19 @@ class RiwayatAsetsTable
             ])
             ->defaultSort('created_at', 'desc')
             ->filters([
+                // Filter yang disederhanakan: fokus pada perubahan stok/status kunci
                 SelectFilter::make('tipe')
+                    ->label('Filter Tipe Transaksi')
                     ->options([
-                        'create' => 'Create',
-                        'update' => 'Update',
-                        'penambahan' => 'Penambahan',
-                        'pengurangan' => 'Pengurangan',
-                        'harga_update' => 'Update Harga',
+                        'create' => 'Aset Baru Dibuat',
+                        'penambahan' => 'Penambahan Stok',
+                        'pengurangan' => 'Pengurangan Stok Manual',
+                        'pinjam_disetujui' => 'Pinjaman Disetujui',
+                        'pinjam_dikembalikan' => 'Pinjaman Dikembalikan',
+                        'permintaan_atk_dikeluarkan' => 'ATK Dikeluarkan', // Filter ATK
                         'lokasi_update' => 'Update Lokasi',
-                        'pinjam_disetujui' => 'Pinjam Disetujui',
-                        'pinjam_dikembalikan' => 'Pinjam Dikembalikan',
-                        'pinjam_dihapus' => 'Pinjam Dihapus',
+                        'harga_update' => 'Update Harga',
                     ]),
             ]);
     }
 }
-
-
