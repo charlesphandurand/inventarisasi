@@ -1,165 +1,106 @@
 <!DOCTYPE html>
-<html lang="id">
+<html>
 <head>
-    <meta charset="UTF-8">
     <title>{{ $title }}</title>
     <style>
-        /* CSS untuk Laporan PDF */
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: Arial, sans-serif;
-            font-size: 7pt; /* Ukuran font disesuaikan agar cukup untuk kolom yang lebih banyak */
-            padding: 15px;
-        }
-
-        .header {
-            text-align: center;
-            margin-bottom: 15px;
-            border-bottom: 2px solid #333;
-            padding-bottom: 8px;
-        }
-
-        .header h1 {
-            font-size: 14pt;
-            margin-bottom: 3px;
-        }
-
-        .header p {
-            font-size: 7pt;
-            color: #666;
-        }
-
+        /* CSS Dasar untuk Cetak */
+        body { font-family: sans-serif; margin: 20px; font-size: 10pt; }
+        h1 { font-size: 14pt; margin-bottom: 5px; }
+        .info { margin-bottom: 15px; font-size: 9pt; }
+        .info p { margin: 2px 0; }
         table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 10px;
+            margin-bottom: 20px;
         }
-
         th, td {
-            border: 1px solid #ddd;
-            padding: 4px; /* Padding lebih kecil */
+            border: 1px solid #ccc;
+            padding: 5px 8px;
             text-align: left;
+            word-wrap: break-word;
+            max-width: 150px; /* Batasi lebar untuk tampilan Landscape */
+            font-size: 8pt;
         }
-
-        th {
-            background-color: #f2f2f2;
+        th { background-color: #f0f0f0; text-align: center; font-weight: bold; }
+        .text-center { text-align: center; }
+        .text-right { text-align: right; }
+        /* Style untuk badge tipe transaksi */
+        .badge {
+            display: inline-block;
+            padding: 3px 6px;
+            border-radius: 4px;
+            font-size: 7pt;
             font-weight: bold;
-            font-size: 7pt;
+            color: #fff;
         }
-
-        td {
-            font-size: 7pt;
-        }
-
-        .text-center {
-            text-align: center;
-        }
-
-        .text-right {
-            text-align: right;
-        }
-
-        .footer {
-            margin-top: 20px;
-            text-align: center;
-            font-size: 6pt;
-            color: #666;
-            border-top: 1px solid #ddd;
-            padding-top: 8px;
-        }
+        .badge-warning { background-color: #f59e0b; }
+        .badge-success { background-color: #10b981; }
+        .badge-primary { background-color: #3b82f6; }
+        .badge-info { background-color: #06b6d4; }
+        .badge-danger { background-color: #ef4444; }
+        .badge-gray { background-color: #6b7280; }
     </style>
 </head>
 <body>
-<div class="header">
     <h1>{{ $title }}</h1>
-    <p>Laporan Dihasilkan: {{ now()->format('d F Y H:i:s') }}</p>
-</div>
+    <div class="info">
+        <p><strong>Periode Data:</strong> {{ $dateFrom }} hingga {{ $dateTo }}</p>
+        <p><strong>Dicetak pada:</strong> {{ now()->format('d M Y H:i:s') }}</p>
+    </div>
 
-<table>
-    <thead>
-        <tr>
-            <th style="width: 3%;" class="text-center">No</th>
-            <th style="width: 12%;">Nama Aset</th>
-            <th style="width: 11%;">Tanggal/Waktu</th> {{-- Lebar kolom disesuaikan --}}
-            <th style="width: 7%;">Tipe</th>
-            <th style="width: 11%;">Lokasi Sebelum</th>
-            <th style="width: 11%;">Lokasi Sesudah</th>
-            <th style="width: 9%;">Harga Sebelum</th>
-            <th style="width: 9%;">Harga Sesudah</th>
-            <th style="width: 11%;">Penanggung Jawab</th>
-            <th style="width: 16%;">Keterangan</th>
-        </tr>
-    </thead>
-    <tbody>
-        @forelse ($data as $index => $item)
+    <table>
+        <thead>
             <tr>
-                <td class="text-center">{{ $index + 1 }}</td>
-
-                {{-- 1. Nama Aset --}}
-                <td>{{ strtoupper($item->aset->nama_barang ?? $item->nama_barang ?? '-') }}</td>
-
-                {{-- 2. Tanggal & Waktu Riwayat (created_at) --}}
-                <td class="text-center">
-                    @if ($item->created_at)
-                        {{-- Format diubah menjadi d/m/Y H:i:s untuk menyertakan jam --}}
-                        {{ \Carbon\Carbon::parse($item->created_at)->format('d/m/Y H:i:s') }}
-                    @else
-                        -
-                    @endif
-                </td>
-
-                {{-- 3. Tipe --}}
-                <td>{{ strtoupper($item->tipe ?? '-') }}</td>
-
-                {{-- 4. Lokasi/Pengguna Lama --}}
-                <td>{{ strtoupper($item->lokasi_sebelum ?? '-') }}</td>
-
-                {{-- 5. Lokasi/Pengguna Baru --}}
-                <td>{{ strtoupper($item->lokasi_sesudah ?? '-') }}</td>
-
-                {{-- 6. Harga Sebelum (harga_sebelum) --}}
-                <td class="text-right">
-                    @if ($item->harga_sebelum)
-                        Rp {{ number_format($item->harga_sebelum, 0, ',', '.') }}
-                    @else
-                        -
-                    @endif
-                </td>
-
-                {{-- 7. Harga Sesudah (harga_sesudah) --}}
-                <td class="text-right">
-                    @if ($item->harga_sesudah)
-                        Rp {{ number_format($item->harga_sesudah, 0, ',', '.') }}
-                    @else
-                        -
-                    @endif
-                </td>
-
-                {{-- 8. Penanggung Jawab (user->name) --}}
-                <td>{{ $item->user->name ?? $item->user_id ?? '-' }}</td>
-
-                {{-- 9. Keterangan --}}
-                <td>
-                    {{ $item->keterangan ?? '-' }}
-                </td>
+                @foreach($selectedHeaders as $header)
+                    <th>{{ $header }}</th>
+                @endforeach
             </tr>
-        @empty
-            <tr>
-                <td colspan="10" class="text-center">Tidak ada data riwayat aset ditemukan dalam laporan ini.</td>
-            </tr>
-        @endforelse
-    </tbody>
-</table>
+        </thead>
+        <tbody>
+            @foreach($data as $item)
+                <tr>
+                    @foreach($selectedHeaders as $key => $header)
+                        @php
+                            // Ambil nilai menggunakan data_get untuk properti bertingkat (dot notation)
+                            $value = data_get($item, $key);
+                            $class = '';
+                            $formattedValue = $value;
 
-<div class="footer">
-    <p>Laporan ini mencakup {{ $data->count() }} item riwayat aset.</p>
-    <p>Dibuat otomatis pada {{ now()->format('d/m/Y') }}.</p>
-</div>
-
+                            // Logika Formatting sesuai dengan PHP class
+                            if ($key === 'tipe') {
+                                $formattedValue = $formatTipe($value ?? '');
+                                $badgeClass = match ($value) {
+                                    'pinjam_dikembalikan' => 'badge-warning',
+                                    'create', 'penambahan', 'permintaan_atk_dikeluarkan' => 'badge-success',
+                                    'pinjam_disetujui' => 'badge-primary',
+                                    'lokasi_update', 'harga_update' => 'badge-info',
+                                    'pinjam_dihapus', 'pengurangan' => 'badge-danger',
+                                    default => 'badge-gray',
+                                };
+                                $formattedValue = "<span class='badge {$badgeClass}'>{$formattedValue}</span>";
+                            } elseif (str_contains($key, 'harga')) {
+                                // **PERBAIKAN DI SINI:** Menggunakan helper $formatRupiah dari PHP
+                                $formattedValue = $formatRupiah($value); 
+                                $class = 'text-right';
+                            } elseif (str_contains($key, 'jumlah_perubahan') || str_contains($key, 'stok')) {
+                                $class = 'text-center';
+                                $formattedValue = $value ?? 0;
+                            } elseif ($key === 'created_at') {
+                                $formattedValue = $value ? \Carbon\Carbon::parse($value)->format('d M Y H:i') : '-';
+                            } elseif ($key === 'keterangan') {
+                                // **PERBAIKAN DI SINI:** Menggunakan helper $formatKeterangan dari PHP untuk menampilkan full text atau '-'
+                                $formattedValue = $formatKeterangan($value);
+                            } elseif ($key === 'lokasi_sebelum' || $key === 'lokasi_sesudah') {
+                                $formattedValue = $value ?? '-';
+                            } else {
+                                $formattedValue = $value ?? '-';
+                            }
+                        @endphp
+                        <td class="{{ $class }}">{!! $formattedValue !!}</td>
+                    @endforeach
+                </tr>
+            @endforeach
+        </tbody>
+    </table>
 </body>
 </html>
