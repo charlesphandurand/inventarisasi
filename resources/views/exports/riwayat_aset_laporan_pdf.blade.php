@@ -79,20 +79,22 @@
                                 };
                                 $formattedValue = "<span class='badge {$badgeClass}'>{$formattedValue}</span>";
                             } elseif (str_contains($key, 'harga')) {
-                                // **PERBAIKAN DI SINI:** Menggunakan helper $formatRupiah dari PHP
                                 $formattedValue = $formatRupiah($value); 
                                 $class = 'text-right';
+                            // >> PERBAIKAN DI SINI: Menggunakan helper $formatStok untuk semua kolom stok
                             } elseif (str_contains($key, 'jumlah_perubahan') || str_contains($key, 'stok')) {
                                 $class = 'text-center';
-                                $formattedValue = $value ?? 0;
+                                $formattedValue = $formatStok($value); // Menerapkan 0/null menjadi "-"
+                            // << AKHIR PERBAIKAN
                             } elseif ($key === 'created_at') {
                                 $formattedValue = $value ? \Carbon\Carbon::parse($value)->format('d M Y H:i') : '-';
                             } elseif ($key === 'keterangan') {
-                                // **PERBAIKAN DI SINI:** Menggunakan helper $formatKeterangan dari PHP untuk menampilkan full text atau '-'
+                                // Menggunakan helper $formatKeterangan dari PHP
                                 $formattedValue = $formatKeterangan($value);
                             } elseif ($key === 'lokasi_sebelum' || $key === 'lokasi_sesudah') {
                                 $formattedValue = $value ?? '-';
                             } else {
+                                // Default: semua nilai null/kosong menjadi "-"
                                 $formattedValue = $value ?? '-';
                             }
                         @endphp
