@@ -25,7 +25,7 @@ class PermintaanBarangResource extends Resource
 
     protected static ?string $recordTitleAttribute = 'permintaan barang';
     
-    protected static ?string $navigationLabel = 'Permintaan Barang (ATK)'; 
+    protected static ?string $navigationLabel = 'Permintaan ATK'; 
     protected static UnitEnum|string|null $navigationGroup = 'Manajemen Aset';
     protected static ?string $slug = 'permintaan-barang-atk';
     protected static ?int $navigationSort = 2; // Memberi urutan agar muncul setelah Pinjaman

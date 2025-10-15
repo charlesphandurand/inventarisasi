@@ -12,7 +12,7 @@ class ListPengajuanPinjaman extends ListRecords
     protected static string $resource = PengajuanPinjamanResource::class;
 
     // Tambahkan baris ini
-    protected static ?string $title = 'Pengajuan Pinjaman'; 
+    protected static ?string $title = 'Pinjaman Barang'; 
 
     protected function getHeaderActions(): array
     {

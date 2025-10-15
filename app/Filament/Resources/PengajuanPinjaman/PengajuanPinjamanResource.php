@@ -25,9 +25,9 @@ class PengajuanPinjamanResource extends Resource
 
     protected static BackedEnum|string|null $navigationIcon = 'heroicon-o-document-plus';
 
-    protected static ?string $recordTitleAttribute = 'pengajuan pinjaman';
+    protected static ?string $recordTitleAttribute = 'pinjaman barang';
     
-    protected static ?string $navigationLabel = 'Pengajuan Pinjaman'; 
+    protected static ?string $navigationLabel = 'Pinjaman Barang'; 
     protected static UnitEnum|string|null $navigationGroup = 'Manajemen Aset';
     protected static ?string $slug = 'pengajuan-pinjaman';
 
