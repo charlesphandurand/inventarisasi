@@ -14,10 +14,10 @@ use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 
 // --- Filament Form Components ---
-use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\DatePicker; // PASTIKAN INI ADA
 use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\Select;
-use Filament\Forms\Components\Fieldset; 
+use Filament\Schemas\Components\Fieldset;
 
 // --- Laravel & Database ---
 use Illuminate\Database\Eloquent\Builder;
@@ -105,6 +105,21 @@ class RiwayatAsetsTable
 
         // --- CUSTOM FORM SCHEMA UNTUK EXPORT TERPADU ---
         $exportFormSchemaTerpadu = [
+            // PENAMBAHAN FIELD RENTANG TANGGAL
+            Fieldset::make('Filter Rentang Waktu (Optional)')
+                ->schema([
+                    DatePicker::make('date_from')
+                        ->label('Dari Tanggal')
+                        ->maxDate(now()) // Tidak bisa memilih tanggal di masa depan
+                        ->placeholder(now()->startOfMonth()->format('Y-m-d')),
+                    
+                    DatePicker::make('date_to')
+                        ->label('Sampai Tanggal')
+                        ->maxDate(now())
+                        ->placeholder(now()->format('Y-m-d')),
+                ])
+                ->columns(2),
+
             // 1. SELECT FORMAT FILE TERPADU (Termasuk PDF)
             Select::make('export_format')
                 ->label('Pilih Format File')
@@ -212,11 +227,52 @@ class RiwayatAsetsTable
                                 Notification::make()->warning()->title('Pilih Data')->body('Harap pilih minimal satu riwayat aset untuk diekspor.')->send();
                                 return;
                             }
+                            
+                            // Ambil data filter tanggal
+                            $dateFrom = $data['date_from'];
+                            $dateTo = $data['date_to'];
+                            
+                            // Terapkan filter tanggal ke Collection $records
+                            if ($dateFrom || $dateTo) {
+                                $records = $records->filter(function ($record) use ($dateFrom, $dateTo) {
+                                    $createdAt = Carbon::parse($record->created_at)->startOfDay();
+                                    
+                                    if ($dateFrom && $dateTo) {
+                                        // Pastikan Tanggal Dari lebih kecil dari Tanggal Sampai (atau sama)
+                                        $from = Carbon::parse($dateFrom)->startOfDay();
+                                        $to = Carbon::parse($dateTo)->endOfDay();
+                                        return $createdAt->between($from, $to);
+                                    } elseif ($dateFrom) {
+                                        $from = Carbon::parse($dateFrom)->startOfDay();
+                                        return $createdAt->greaterThanOrEqualTo($from);
+                                    } elseif ($dateTo) {
+                                        $to = Carbon::parse($dateTo)->endOfDay();
+                                        return $createdAt->lessThanOrEqualTo($to);
+                                    }
+                                    return true; // Jika data $records kosong atau filter tidak terdefinisi (seharusnya tidak terjadi di sini)
+                                });
+                            }
+
+                            // Cek lagi setelah difilter
+                            if ($records->isEmpty()) {
+                                Notification::make()
+                                    ->warning()
+                                    ->title('Tidak Ada Data yang Ditemukan')
+                                    ->body('Data riwayat aset yang dipilih kosong setelah diterapkan filter rentang tanggal.')
+                                    ->send();
+                                return;
+                            }
+
 
                             $format = $data['export_format'];
                             $selectedKeys = $data['selected_columns'];
                             $records->load(['aset', 'user']);
                             $filename = 'Riwayat_Aset_Terpilih_' . now()->format('Ymd_His');
+                            
+                            // Format rentang tanggal untuk judul laporan/nama file
+                            $dateFromText = $dateFrom ? Carbon::parse($dateFrom)->format('d M Y') : 'Awal Data';
+                            $dateToText = $dateTo ? Carbon::parse($dateTo)->format('d M Y') : 'Data Terkini';
+
 
                             // --- LOGIKA PDF ---
                             if ($format === 'pdf') {
@@ -235,8 +291,8 @@ class RiwayatAsetsTable
                                         'formatStok' => $formatStokView, 
                                         'formatKeterangan' => $formatKeterangan,
                                         'selectedHeaders' => $selectedHeaders, 
-                                        'dateFrom' => 'Data Terpilih', 
-                                        'dateTo' => 'Data Terpilih',
+                                        'dateFrom' => $dateFromText, // Tambahkan informasi rentang tanggal
+                                        'dateTo' => $dateToText, // Tambahkan informasi rentang tanggal
                                     ])
                                         ->format(Format::A4)
                                         ->landscape()
