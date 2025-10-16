@@ -17,7 +17,7 @@ use Filament\Tables\Table;
 use Filament\Forms\Components\DatePicker; // PASTIKAN INI ADA
 use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\Select;
-use Filament\Schemas\Components\Fieldset;
+use Filament\Schemas\Components\Fieldset; // TIDAK DIUBAH SESUAI PERMINTAAN
 
 // --- Laravel & Database ---
 use Illuminate\Database\Eloquent\Builder;
@@ -145,8 +145,8 @@ class RiwayatAsetsTable
         return $table
             ->heading('Riwayat Transaksi Aset')
             ->columns([
-                TextColumn::make('aset.nama_barang')->label('Aset')->searchable()->sortable(),
-                TextColumn::make('aset.nama_vendor')->label('Vendor')->searchable()->sortable(),
+                TextColumn::make('aset.nama_barang')->label('Aset')->searchable(), // ->sortable() dihapus
+                TextColumn::make('aset.nama_vendor')->label('Vendor')->searchable(), // ->sortable() dihapus
                 TextColumn::make('tipe')
                     ->label('Tipe Transaksi')
                     ->badge()
@@ -158,7 +158,7 @@ class RiwayatAsetsTable
                         'pinjam_dihapus', 'pengurangan' => 'danger',
                         default => 'gray',
                     })
-                    ->sortable()
+                    // ->sortable() dihapus
                     ->formatStateUsing($formatTipe),
                 
                 TextColumn::make('jumlah_perubahan')
@@ -189,8 +189,8 @@ class RiwayatAsetsTable
                 TextColumn::make('lokasi_sebelum')->label('Lokasi Sebelumnya')->formatStateUsing(fn ($state) => $state ?? '-'),
                 TextColumn::make('lokasi_sesudah')->label('Lokasi Sesudah')->formatStateUsing(fn ($state) => $state ?? '-'),
                 
-                TextColumn::make('user.name')->label('Diubah Oleh')->searchable()->sortable()->formatStateUsing(fn ($state) => $state ?? '-'),
-                TextColumn::make('created_at')->label('Waktu')->dateTime()->sortable(),
+                TextColumn::make('user.name')->label('Diubah Oleh')->searchable()->formatStateUsing(fn ($state) => $state ?? '-'), // ->sortable() dihapus
+                TextColumn::make('created_at')->label('Waktu')->dateTime(), // ->sortable() dihapus
                 TextColumn::make('keterangan')
                     ->label('Keterangan')
                     ->limit(35)
@@ -198,6 +198,7 @@ class RiwayatAsetsTable
                     ->formatStateUsing(fn ($state) => $state ?? '-')
                     ->toggleable(isToggledHiddenByDefault: false),
             ])
+            // DIUBAH: Default sorting sekarang 'desc' (Terlama ke Terbaru)
             ->defaultSort('created_at', 'desc')
             ->filters([
                 SelectFilter::make('tipe')
