@@ -127,7 +127,7 @@ class PermintaanBarangTable
                     ->dateTime()
                     ->sortable(),
             ])
-            ->defaultSort('created_at', 'desc')
+            ->defaultSort('tanggal_approval', 'desc')
             ->filters([
                 // Filter ini disederhanakan karena recordUrl sudah mengatur filtering untuk non-admin
                 Filter::make('my_pengajuan')

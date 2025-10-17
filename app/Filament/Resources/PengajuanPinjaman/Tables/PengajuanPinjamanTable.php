@@ -25,6 +25,8 @@ class PengajuanPinjamanTable
     {
         // Ganti isAdmin menjadi hasAdminRole untuk mencakup Maker dan Approver
         $hasAdminRole = Auth::user()->hasAnyRole(['maker', 'approver']); 
+        $isMaker = Auth::user()->hasRole('maker');
+        $isApprover = Auth::user()->hasRole('approver');
         $currentUserId = Auth::id();
 
         return $table
@@ -35,6 +37,25 @@ class PengajuanPinjamanTable
                 $query->whereHas('aset', function (Builder $subQuery) {
                     $subQuery->where('is_atk', '!=', 1); // Diperbarui sesuai saran Anda
                 });
+            })
+            // Selaraskan hak akses klik baris ke Edit seperti PermintaanBarang
+            ->recordUrl(function ($record) use ($isMaker, $isApprover, $currentUserId) {
+                $status = $record->status;
+                $isOwner = $record->user_id === $currentUserId;
+
+                if ($isMaker) {
+                    if ($status === 'diajukan') return \App\Filament\Resources\PengajuanPinjaman\PengajuanPinjamanResource::getUrl('edit', ['record' => $record]);
+                    if ($status === 'ditolak' && $record->admin_id === $currentUserId) return \App\Filament\Resources\PengajuanPinjaman\PengajuanPinjamanResource::getUrl('edit', ['record' => $record]);
+                }
+
+                if ($isApprover) {
+                    if ($status === 'diajukan' && $isOwner) return \App\Filament\Resources\PengajuanPinjaman\PengajuanPinjamanResource::getUrl('edit', ['record' => $record]);
+                    if ($status === 'ditolak' && $record->admin_id === $currentUserId) return \App\Filament\Resources\PengajuanPinjaman\PengajuanPinjamanResource::getUrl('edit', ['record' => $record]);
+                }
+
+                if ($isOwner && $status === 'diajukan') return \App\Filament\Resources\PengajuanPinjaman\PengajuanPinjamanResource::getUrl('edit', ['record' => $record]);
+
+                return null;
             })
             ->columns([
                 TextColumn::make('user.name')
@@ -92,7 +113,7 @@ class PengajuanPinjamanTable
                     ->dateTime()
                     ->sortable(),
             ])
-            ->defaultSort('created_at', 'desc')
+            ->defaultSort('tanggal_approval', 'desc')
             ->filters([
                 Filter::make('my_pengajuan')
                     ->label('Pengajuan Saya')
@@ -101,13 +122,33 @@ class PengajuanPinjamanTable
                     ->visible(fn () => !$hasAdminRole), 
             ])
             ->actions([
+                // Aksi 'Verifikasi' (Maker, dari diajukan → diverifikasi)
+                Action::make('verifikasi')
+                    ->label('Verifikasi & Teruskan')
+                    ->icon('heroicon-o-arrow-right-circle')
+                    ->color('info')
+                    ->visible(fn ($record) => $record->status === 'diajukan' && $isMaker)
+                    ->action(function ($record) {
+                        $record->forceFill([
+                            'status' => 'diverifikasi',
+                            'tanggal_approval' => Carbon::now()->setTimezone(config('app.timezone')),
+                            'admin_id' => Auth::id(),
+                        ])->saveQuietly();
+
+                        Notification::make()
+                            ->title('Pengajuan Diverifikasi')
+                            ->body('Pengajuan telah diverifikasi dan diteruskan ke Approver.')
+                            ->success()
+                            ->send();
+                    }),
+
                 // Aksi 'Setujui' 
                 Action::make('setujui')
                     ->label('Setujui')
                     ->icon('heroicon-o-check-circle')
                     ->color('success')
-                    // Hanya Approver/Maker yang bisa melihat dan status harus 'diajukan'
-                    ->visible(fn ($record) => $record->status === 'diajukan' && $hasAdminRole) 
+                    // Hanya Approver yang bisa melihat dan status harus 'diverifikasi'
+                    ->visible(fn ($record) => $record->status === 'diverifikasi' && $isApprover) 
                     ->action(function ($record) {
                         
                         DB::transaction(function () use ($record) {
@@ -188,8 +229,8 @@ class PengajuanPinjamanTable
                     ->label('Tolak')
                     ->icon('heroicon-o-x-circle')
                     ->color('danger')
-                    // Hanya Approver/Maker yang bisa melihat dan status harus 'diajukan'
-                    ->visible(fn ($record) => $record->status === 'diajukan' && $hasAdminRole) 
+                    // Maker menolak saat 'diajukan', Approver menolak saat 'diverifikasi'
+                    ->visible(fn ($record) => ($record->status === 'diajukan' && $isMaker) || ($record->status === 'diverifikasi' && $isApprover)) 
                     ->action(function ($record) {
                         $record->update([
                             'status' => 'ditolak',
@@ -204,13 +245,13 @@ class PengajuanPinjamanTable
                             ->send();
                     }),
 
-                // AKSI 'DIKEMBALIKAN' 
+                // AKSI 'DIKEMBALIKAN' (khusus Approver saja)
                 Action::make('dikembalikan')
                     ->label('Dikembalikan')
                     ->icon('heroicon-o-arrow-uturn-left')
                     ->color('info')
-                    // Hanya Approver/Maker yang bisa melihat dan status harus 'disetujui'
-                    ->visible(fn ($record) => $record->status === 'disetujui' && $hasAdminRole) 
+                    // Hanya Approver yang bisa melihat dan status harus 'disetujui'
+                    ->visible(fn ($record) => $record->status === 'disetujui' && $isApprover) 
                     ->modalHeading('Pengembalian Aset')
                     ->modalDescription('Masukkan jumlah unit yang dikembalikan oleh peminjam.')
                     ->fillForm(function ($record) {
@@ -297,20 +338,37 @@ class PengajuanPinjamanTable
                         });
                     }),
 
-                // Aksi Edit (Visibilitas Diperbaiki)
+                // Aksi Edit (samakan dengan recordUrl rules)
                 EditAction::make()
-                    // Hanya terlihat jika:
-                    // 1. User adalah Admin (Maker/Approver) ATAU
-                    // 2. User adalah Pemohon DAN statusnya masih 'diajukan' atau 'ditolak'
-                    ->visible(fn ($record) => $hasAdminRole || ($record->user_id === $currentUserId && in_array($record->status, ['diajukan', 'ditolak']))),
+                    ->visible(function ($record) use ($isMaker, $isApprover, $currentUserId) {
+                        $status = $record->status;
+                        $isOwner = $record->user_id === $currentUserId;
+
+                        if ($isMaker) {
+                            return $status === 'diajukan' || ($status === 'ditolak' && $record->admin_id === $currentUserId);
+                        }
+                        if ($isApprover) {
+                            if ($status === 'diajukan' && $isOwner) return true;
+                            if ($status === 'ditolak' && $record->admin_id === $currentUserId) return true;
+                            return false;
+                        }
+                        return $isOwner && $status === 'diajukan';
+                    }),
                 
-                // Aksi Delete
-                DeleteAction::make()->visible(fn () => $hasAdminRole), // Hanya Admin yang bisa Delete
+                // Aksi Delete: hanya pemilik saat status diajukan
+                DeleteAction::make()
+                    ->visible(fn ($record) => $record->user_id === $currentUserId && $record->status === 'diajukan')
+                    ->action(function ($record) {
+                        if ($record->user_id !== Auth::id() || $record->status !== 'diajukan') {
+                            Notification::make()->title('Aksi ditolak').body('Anda tidak dapat menghapus pengajuan ini.').danger()->send();
+                            return;
+                        }
+                        $record->delete();
+                        Notification::make()->title('Pengajuan dihapus').success()->send();
+                    }),
             ])
+            // Nonaktifkan bulk delete
             ->bulkActions([
-                BulkActionGroup::make([
-                    DeleteBulkAction::make()->visible(fn () => $hasAdminRole),
-                ]),
             ]);
     }
 }

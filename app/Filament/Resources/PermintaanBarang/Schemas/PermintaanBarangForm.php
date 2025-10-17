@@ -111,6 +111,12 @@ class PermintaanBarangForm
                 // Pastikan menggunakan namespace yang benar untuk EditRecord di Form Schema
                 ->visible(fn ($livewire) => $livewire instanceof EditRecord && Auth::user()?->hasAnyRole(['maker', 'approver']))
                 ->required()
+                // Nonaktifkan pilihan 'diverifikasi' untuk approver pada status berjalan 'diverifikasi'
+                ->disableOptionWhen(function ($value) {
+                    $user = Auth::user();
+                    $isApprover = $user?->hasRole('approver');
+                    return $isApprover && $value === 'diverifikasi';
+                })
                 ->afterStateUpdated(function ($state, callable $set, Get $get) {
                     // Logika untuk mencegah approval jika stok kurang saat diubah menjadi 'dikeluarkan'
                     if ($state === 'dikeluarkan') {

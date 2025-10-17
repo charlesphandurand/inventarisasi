@@ -35,15 +35,47 @@ class PengajuanPinjamanForm
                     ->searchable()
                     ->reactive(),
 
-                // Dropdown Status (Hanya visible untuk Approver saat Edit)
+                // Dropdown Status (Dinamis sesuai peran dan status berjalan)
                 Select::make('status')
                     ->label('Status Persetujuan')
-                    ->options([
-                        'diajukan' => 'Diajukan',
-                        'disetujui' => 'Disetujui',
-                        'ditolak' => 'Ditolak',
-                        'dikembalikan' => 'Dikembalikan',
-                    ])
+                    ->options(function ($livewire) {
+                        $user = Auth::user();
+                        $isMaker = $user?->hasRole('maker');
+                        $isApprover = $user?->hasRole('approver');
+                        $record = $livewire instanceof EditRecord ? $livewire->getRecord() : null;
+                        $currentStatus = $record?->status ?? 'diajukan';
+
+                        $options = [];
+                        // Selalu tampilkan status saat ini agar form tidak error
+                        $options[$currentStatus] = ucfirst($currentStatus);
+
+                        // Maker: pada diajukan/diverifikasi → boleh pilih diajukan/diverifikasi
+                        if ($isMaker && in_array($currentStatus, ['diajukan', 'diverifikasi'])) {
+                            $options['diajukan'] = 'Diajukan';
+                            $options['diverifikasi'] = 'Diverifikasi';
+                        }
+
+                        // Maker: jika ditolak oleh dirinya sendiri → boleh pilih tiga opsi
+                        if ($isMaker && $currentStatus === 'ditolak' && $record && $record->admin_id === $user->id) {
+                            $options['diajukan'] = 'Diajukan';
+                            $options['diverifikasi'] = 'Diverifikasi';
+                            $options['ditolak'] = 'Ditolak';
+                        }
+
+                        // Approver: pada diverifikasi → boleh pilih disetujui/ditolak
+                        if ($isApprover && $currentStatus === 'diverifikasi') {
+                            $options['disetujui'] = 'Disetujui';
+                            $options['ditolak'] = 'Ditolak';
+                        }
+
+                        return $options;
+                    })
+                    // Nonaktifkan pilihan 'diverifikasi' untuk approver saat status berjalan 'diverifikasi'
+                    ->disableOptionWhen(function ($value) {
+                        $user = Auth::user();
+                        $isApprover = $user?->hasRole('approver');
+                        return $isApprover && $value === 'diverifikasi';
+                    })
                     ->default('diajukan')
                     ->visible(fn ($livewire) => $livewire instanceof EditRecord && Auth::user()?->hasAnyRole(['maker', 'approver']))
                     ->required()
