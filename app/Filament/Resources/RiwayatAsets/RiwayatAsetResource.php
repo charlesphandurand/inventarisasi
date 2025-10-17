@@ -45,8 +45,8 @@ class RiwayatAsetResource extends Resource
 
     public static function canViewAny(): bool
     {
-        // Hanya izinkan pengguna dengan peran 'admin' untuk melihat resource ini.
-        // Jika pengguna bukan admin, menu akan disembunyikan dan akses langsung akan dicegah.
-        return auth()->user()->hasRole('admin') || auth()->user()->hasRole('approver');
+        // Hanya izinkan pengguna dengan peran 'approver' untuk melihat resource ini.
+        // Jika pengguna bukan approver, menu akan disembunyikan dan akses langsung akan dicegah.
+        return auth()->user()->hasRole('approver') || auth()->user()->hasRole('maker') || auth()->user()->hasRole('user');
     }
 }

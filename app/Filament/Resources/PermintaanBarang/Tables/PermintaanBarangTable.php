@@ -16,24 +16,64 @@ use Carbon\Carbon;
 use Filament\Notifications\Notification;
 use Filament\Tables\Filters\Filter;
 use Illuminate\Support\Facades\DB;
-use Filament\Forms\Components\TextInput; 
 use Illuminate\Database\Eloquent\Builder; 
+use App\Filament\Resources\PermintaanBarang\PermintaanBarangResource;
 
 class PermintaanBarangTable
 {
     public static function configure(Table $table): Table
     {
-        $isAdmin = Auth::user()->hasAnyRole(['approver']);
+        $isApprover = Auth::user()->hasRole('approver');
+        $isMaker = Auth::user()->hasRole('maker');
+        $isAdmin = $isMaker || $isApprover; 
         $currentUserId = Auth::id();
 
         return $table
-            // PERUBAHAN KRITIS: Memodifikasi query utama untuk hanya menampilkan
-            // pengajuan yang terkait dengan aset yang KHUSUS ATK (is_atk = 1).
             ->modifyQueryUsing(function (Builder $query) {
                 // Memastikan aset terkait memiliki is_atk = 1 (ATK)
                 $query->whereHas('aset', function (Builder $subQuery) {
                     $subQuery->where('is_atk', 1);
                 });
+            })
+            // Tambahkan recordUrl untuk mengontrol klik pada baris
+            ->recordUrl(function ($record) use ($isAdmin, $currentUserId, $isMaker, $isApprover) {
+                $status = $record->status;
+                $isOwner = $record->user_id === $currentUserId;
+                
+                // Maker: boleh edit status 'diajukan' dan 'diverifikasi',
+                // serta 'ditolak' jika penolaknya adalah maker sendiri
+                if ($isMaker) {
+                    if (in_array($status, ['diajukan', 'diverifikasi'])) {
+                        return PermintaanBarangResource::getUrl('edit', ['record' => $record]);
+                    }
+                    if ($status === 'ditolak' && $record->admin_id === $currentUserId) {
+                        return PermintaanBarangResource::getUrl('edit', ['record' => $record]);
+                    }
+                }
+
+                // Approver:
+                // - boleh edit saat 'diverifikasi'
+                // - boleh edit 'ditolak' hanya jika admin_id == dirinya
+                // - boleh edit MILIKNYA saat status 'diajukan'
+                if ($isApprover) {
+                    if ($status === 'diverifikasi') {
+                        return PermintaanBarangResource::getUrl('edit', ['record' => $record]);
+                    }
+                    if ($status === 'ditolak' && $record->admin_id === $currentUserId) {
+                        return PermintaanBarangResource::getUrl('edit', ['record' => $record]);
+                    }
+                    if ($status === 'diajukan' && $record->user_id === $currentUserId) {
+                        return PermintaanBarangResource::getUrl('edit', ['record' => $record]);
+                    }
+                    return null;
+                }
+
+                // Pemohon hanya boleh mengakses edit jika status 'diajukan'
+                if ($isOwner && $status === 'diajukan') {
+                    return PermintaanBarangResource::getUrl('edit', ['record' => $record]);
+                }
+
+                return null;
             })
             ->columns([
                 TextColumn::make('user.name')
@@ -50,7 +90,6 @@ class PermintaanBarangTable
                     ->numeric()
                     ->sortable(),
                 
-                // Menggunakan kolom 'jumlah_dikembalikan' untuk menyimpan jumlah yang dikeluarkan
                 TextColumn::make('jumlah_dikembalikan')
                     ->label('Jml Dikeluarkan')
                     ->numeric()
@@ -71,10 +110,9 @@ class PermintaanBarangTable
                     ->badge()
                     ->color(fn (string $state): string => match ($state) {
                         'diajukan' => 'warning',
-                        'disetujui' => 'success',
+                        'diverifikasi' => 'info',
                         'ditolak' => 'danger',
-                        // PERUBAHAN STATUS: Ganti 'dikeluarkan' dengan 'dikeluarkan' untuk menghindari error truncation
-                        'dikeluarkan' => 'info', 
+                        'dikeluarkan' => 'success', 
                         default => 'gray',
                     })
                     ->sortable(),
@@ -82,10 +120,7 @@ class PermintaanBarangTable
                 TextColumn::make('created_at')
                     ->label('Tanggal Pengajuan')
                     ->dateTime()
-                    ->sortable()
-                    ->default(function () {
-                        return Carbon::now()->setTimezone(config('app.timezone'))->toDateTimeString();
-                    }),
+                    ->sortable(),
 
                 TextColumn::make('tanggal_approval')
                     ->label('Tanggal Diverifikasi')
@@ -94,125 +129,181 @@ class PermintaanBarangTable
             ])
             ->defaultSort('created_at', 'desc')
             ->filters([
+                // Filter ini disederhanakan karena recordUrl sudah mengatur filtering untuk non-admin
                 Filter::make('my_pengajuan')
                     ->label('Permintaan Saya')
-                    ->query(fn ($query) => $isAdmin ? $query : $query->where('user_id', $currentUserId))
+                    ->query(fn (Builder $query) => $query->where('user_id', $currentUserId))
                     ->visible(fn () => !$isAdmin), 
             ])
             ->actions([
-                // Aksi 'Setujui' (Mengurangi stok ATK)
+                // Aksi BARU: Verifikasi & Teruskan ke Approver (Hanya untuk Maker, Status 'diajukan')
+                Action::make('verifikasi')
+                    ->label('Verifikasi & Teruskan ke Approver')
+                    ->icon('heroicon-o-arrow-right-circle')
+                    ->color('info')
+                    ->visible(fn ($record) => $record->status === 'diajukan' && $isMaker)
+                    ->requiresConfirmation()
+                    ->modalHeading('Verifikasi Permintaan')
+                    ->modalDescription('Pastikan data dan stok sudah di-review. Status akan diubah menjadi "Diverifikasi" dan diteruskan ke Approver.')
+                    ->modalSubmitActionLabel('Ya, Verifikasi & Teruskan')
+                    ->action(function ($record) {
+                        // Tidak perlu DB::transaction karena tidak ada perubahan stok
+                        $record->forceFill([
+                            'status' => 'diverifikasi', 
+                            'tanggal_approval' => Carbon::now()->setTimezone(config('app.timezone')),
+                            'admin_id' => Auth::id(), 
+                        ])->saveQuietly();
+
+                        Notification::make()
+                            ->title('Permintaan ATK Diverifikasi')
+                            ->body("Permintaan {$record->aset->nama_barang} telah diverifikasi dan diteruskan ke Approver.")
+                            ->success()
+                            ->send();
+                    }),
+
+                // Aksi 'Setujui & Keluarkan Barang' (Hanya untuk Approver, Status 'diverifikasi')
                 Action::make('setujui')
                     ->label('Setujui & Keluarkan Barang')
                     ->icon('heroicon-o-check-circle')
                     ->color('success')
-                    ->visible(fn ($record) => $record->status === 'diajukan' && $isAdmin)
+                    ->visible(fn ($record) => $record->status === 'diverifikasi' && $isApprover)
                     ->action(function ($record) {
                         
-                        DB::transaction(function () use ($record) {
-                            $aset = Aset::find($record->aset_id);
-                            
-                            if (!$aset) {
-                                Notification::make()->title('Error')->body('Aset (ATK) tidak ditemukan.')->danger()->send();
-                                return;
-                            }
-                            
-                            $aset->lockForUpdate(); 
-                            
-                            $jumlahPinjam = $record->jumlah_pinjam;
-                            $stokSebelum = $aset->jumlah_barang;
+                        try {
+                            DB::transaction(function () use ($record) {
+                                $aset = Aset::find($record->aset_id);
+                                
+                                if (!$aset) {
+                                    throw new \Exception('Aset (ATK) tidak ditemukan.');
+                                }
+                                
+                                // Lock the Aset record for update (Penting untuk mencegah race condition)
+                                $aset->lockForUpdate();
+                                
+                                $jumlahPinjam = $record->jumlah_pinjam;
+                                $stokSebelum = $aset->jumlah_barang;
 
-                            if ($stokSebelum < $jumlahPinjam) {
-                                Notification::make()
-                                    ->title('Gagal Disetujui')
-                                    ->body("Jumlah barang '{$aset->nama_barang}' tidak mencukupi. Sisa stok: {$stokSebelum}")
-                                    ->danger()
-                                    ->send();
-                                return;
-                            }
-                            
-                            $lokasiGudang = $aset->lokasi; 
-                            $peminjamNama = $record->user?->name ?? 'Pemohon';
-                            
-                            $stokSesudah = $stokSebelum - $jumlahPinjam;
+                                if ($stokSebelum < $jumlahPinjam) {
+                                    throw new \Exception("Jumlah barang '{$aset->nama_barang}' tidak mencukupi. Sisa stok: {$stokSebelum}");
+                                }
+                                
+                                $lokasiGudang = $aset->lokasi; 
+                                $peminjamNama = $record->user?->name ?? 'Pemohon';
+                                $stokSesudah = $stokSebelum - $jumlahPinjam;
 
-                            // 1. RAW UPDATE STOK
-                            $updated = DB::table('asets')
-                                ->where('id', $aset->id)
-                                ->where('jumlah_barang', $stokSebelum) 
-                                ->update([
-                                    'jumlah_barang' => $stokSesudah,
+                                // 1. Update STOK menggunakan Query Builder (Optimistic Locking)
+                                $updated = DB::table('asets')
+                                    ->where('id', $aset->id)
+                                    ->where('jumlah_barang', $stokSebelum) 
+                                    ->update(['jumlah_barang' => $stokSesudah]);
+
+                                if (!$updated) {
+                                    throw new \Exception('Terjadi masalah konsistensi data stok (Race Condition). Silakan coba lagi.');
+                                }
+                                
+                                // 2. Update record pengajuan
+                                $record->forceFill([
+                                    'status' => 'dikeluarkan',
+                                    'tanggal_approval' => Carbon::now()->setTimezone(config('app.timezone')),
+                                    'admin_id' => Auth::id(),
+                                    'jumlah_dikembalikan' => $jumlahPinjam,
+                                    'lokasi_sebelum' => $lokasiGudang, 
+                                    ])->saveQuietly();
+                                
+                                // 3. Catat riwayat PENGELUARAN BARANG ATK
+                                RiwayatAset::create([
+                                    'aset_id' => $aset->id,
+                                    'user_id' => Auth::id(),
+                                    'tipe' => 'permintaan_atk_dikeluarkan', 
+                                    'jumlah_perubahan' => -$jumlahPinjam,
+                                    'stok_sebelum' => $stokSebelum,
+                                    'stok_sesudah' => $stokSesudah,
+                                    'lokasi_sebelum' => $lokasiGudang, 
+                                    'lokasi_sesudah' => $peminjamNama . ' (Diterima)', 
+                                    'keterangan' => 'Permintaan ATK disetujui dan dikeluarkan untuk ' . $peminjamNama . ' oleh Approver melalui Action.',
                                 ]);
-
-                            if (!$updated) {
+                                
                                 Notification::make()
-                                    ->title('Gagal Disetujui')
-                                    ->body('Terjadi masalah konsistensi data (Race Condition). Silakan coba lagi.')
-                                    ->danger()
+                                    ->title('Permintaan ATK dikeluarkan')
+                                    ->body("Permintaan {$aset->nama_barang} telah disetujui dan barang dikeluarkan. Stok tersisa: {$stokSesudah}")
+                                    ->success()
                                     ->send();
-                                return;
-                            }
 
-                            // 2. Update record pengajuan
-                            $record->forceFill([
-                                // PERUBAHAN STATUS: Mengganti menjadi 'dikeluarkan'
-                                'status' => 'dikeluarkan', 
-                                'tanggal_approval' => Carbon::now()->setTimezone(config('app.timezone')),
-                                'admin_id' => Auth::id(),
-                                'jumlah_dikembalikan' => $jumlahPinjam, // Jumlah yang dikeluarkan
-                                'lokasi_sebelum' => $lokasiGudang, 
-                            ])->saveQuietly();
-                            
-                            // 3. Catat riwayat PENGELUARAN BARANG ATK
-                            RiwayatAset::create([
-                                'aset_id' => $aset->id,
-                                'user_id' => Auth::id(),
-                                'tipe' => 'permintaan_atk_dikeluarkan', // Update tipe riwayat
-                                'jumlah_perubahan' => -$jumlahPinjam,
-                                'stok_sebelum' => $stokSebelum,
-                                'stok_sesudah' => $stokSesudah,
-                                'lokasi_sebelum' => $lokasiGudang, 
-                                'lokasi_sesudah' => $peminjamNama . ' (Diterima)', 
-                                'keterangan' => 'Permintaan ATK disetujui dan dikeluarkan untuk ' . $peminjamNama,
-                            ]);
-                            
-                            Notification::make()
-                                ->title('Permintaan ATK dikeluarkan')
-                                ->body("Permintaan {$aset->nama_barang} telah disetujui dan barang dikeluarkan. Stok tersisa: {$stokSesudah}")
-                                ->success()
-                                ->send();
-                        });
+                            });
+                        } catch (\Throwable $e) {
+                             // Tampilkan error dari exception yang dilempar di transaksi
+                             Notification::make()->title('Gagal Pengeluaran')->body($e->getMessage())->danger()->send();
+                        }
                     }),
                 
-                // Aksi 'Tolak' (LOGIKA TIDAK BERUBAH)
+                // Aksi 'Tolak' (Bisa oleh Maker atau Approver)
                 Action::make('tolak')
                     ->label('Tolak')
                     ->icon('heroicon-o-x-circle')
                     ->color('danger')
-                    ->visible(fn ($record) => $record->status === 'diajukan' && $isAdmin)
+                    ->visible(fn ($record) => 
+                        // Maker tolak status 'diajukan'
+                        ($record->status === 'diajukan' && $isMaker) || 
+                        // Approver tolak status 'diverifikasi'
+                        ($record->status === 'diverifikasi' && $isApprover)
+                        // Aksi tolak tidak diizinkan pada status 'dikeluarkan' di Action
+                    )
                     ->action(function ($record) {
-                        $record->update([
-                            'status' => 'ditolak',
-                            'tanggal_approval' => Carbon::now()->setTimezone(config('app.timezone')),
-                            'admin_id' => Auth::id(),
-                        ]);
+                        
+                        DB::transaction(function () use ($record) {
+                            $record->forceFill([
+                                'status' => 'ditolak',
+                                'tanggal_approval' => Carbon::now()->setTimezone(config('app.timezone')),
+                                'admin_id' => Auth::id(),
+                            ])->saveQuietly();
 
-                        Notification::make()
-                            ->title('Permintaan Ditolak')
-                            ->body('Permintaan berhasil ditolak.')
-                            ->danger()
-                            ->send();
+                            Notification::make()
+                                ->title('Permintaan Ditolak')
+                                ->body('Permintaan berhasil ditolak.')
+                                ->danger()
+                                ->send();
+                        });
                     }),
 
-                // AKSI 'DIKEMBALIKAN' DIHILANGKAN (sesuai kebutuhan ATK)
+                // Edit Action: [LOGIKA FINAL KONFIRMASI]
+                EditAction::make()
+                    ->visible(function ($record) use ($isMaker, $isApprover, $currentUserId) {
+                        $status = $record->status;
+                        $isOwner = $record->user_id === $currentUserId;
+
+                        if ($isMaker) {
+                            return in_array($status, ['diajukan', 'diverifikasi']) || ($status === 'ditolak' && $record->admin_id === $currentUserId);
+                        }
+                        if ($isApprover) {
+                            if ($status === 'diverifikasi') return true;
+                            if ($status === 'ditolak') return $record->admin_id === $currentUserId;
+                            if ($status === 'diajukan') return $isOwner;
+                            return false;
+                        }
+                        return $isOwner && $status === 'diajukan';
+                    }),
                 
-                EditAction::make()->visible(fn ($record) => $isAdmin || ($record->status === 'diajukan' && $record->user_id === $currentUserId)),
-                
-                DeleteAction::make()->visible(fn () => $isAdmin),
+                // Delete Action: [LOGIKA FINAL KONFIRMASI]
+                DeleteAction::make()
+                    ->visible(function ($record) use ($currentUserId) {
+                        // Hanya pemilik dan hanya saat status diajukan
+                        return $record->user_id === $currentUserId && $record->status === 'diajukan';
+                    })
+                    ->action(function ($record) {
+                        // Pastikan hanya pemilik dan status diajukan (double-check server side)
+                        if ($record->user_id !== Auth::id() || $record->status !== 'diajukan') {
+                            Notification::make()->title('Aksi ditolak').body('Anda tidak dapat menghapus permintaan ini.').danger()->send();
+                            return;
+                        }
+                        $record->delete();
+                        Notification::make()->title('Permintaan dihapus').success()->send();
+                    }),
             ])
             ->bulkActions([
-                BulkActionGroup::make([
-                    DeleteBulkAction::make()->visible(fn () => $isAdmin),
-                ]),
+                // BulkActionGroup::make([
+                //     DeleteBulkAction::make()
+                //         ->visible(fn () => $isAdmin),
+                // ]),
             ]);
     }
 }

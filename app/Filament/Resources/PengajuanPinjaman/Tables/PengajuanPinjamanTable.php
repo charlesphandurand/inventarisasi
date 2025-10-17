@@ -23,7 +23,8 @@ class PengajuanPinjamanTable
 {
     public static function configure(Table $table): Table
     {
-        $isAdmin = Auth::user()->hasAnyRole(['approver']);
+        // Ganti isAdmin menjadi hasAdminRole untuk mencakup Maker dan Approver
+        $hasAdminRole = Auth::user()->hasAnyRole(['maker', 'approver']); 
         $currentUserId = Auth::id();
 
         return $table
@@ -95,8 +96,9 @@ class PengajuanPinjamanTable
             ->filters([
                 Filter::make('my_pengajuan')
                     ->label('Pengajuan Saya')
-                    ->query(fn ($query) => $isAdmin ? $query : $query->where('user_id', $currentUserId))
-                    ->visible(fn () => !$isAdmin), 
+                    // Filter hanya tampil untuk non-Admin
+                    ->query(fn ($query) => $hasAdminRole ? $query : $query->where('user_id', $currentUserId)) 
+                    ->visible(fn () => !$hasAdminRole), 
             ])
             ->actions([
                 // Aksi 'Setujui' 
@@ -104,7 +106,8 @@ class PengajuanPinjamanTable
                     ->label('Setujui')
                     ->icon('heroicon-o-check-circle')
                     ->color('success')
-                    ->visible(fn ($record) => $record->status === 'diajukan' && $isAdmin)
+                    // Hanya Approver/Maker yang bisa melihat dan status harus 'diajukan'
+                    ->visible(fn ($record) => $record->status === 'diajukan' && $hasAdminRole) 
                     ->action(function ($record) {
                         
                         DB::transaction(function () use ($record) {
@@ -180,12 +183,13 @@ class PengajuanPinjamanTable
                         });
                     }),
                 
-                // Aksi 'Tolak' (LOGIKA TIDAK BERUBAH)
+                // Aksi 'Tolak' 
                 Action::make('tolak')
                     ->label('Tolak')
                     ->icon('heroicon-o-x-circle')
                     ->color('danger')
-                    ->visible(fn ($record) => $record->status === 'diajukan' && $isAdmin)
+                    // Hanya Approver/Maker yang bisa melihat dan status harus 'diajukan'
+                    ->visible(fn ($record) => $record->status === 'diajukan' && $hasAdminRole) 
                     ->action(function ($record) {
                         $record->update([
                             'status' => 'ditolak',
@@ -200,12 +204,13 @@ class PengajuanPinjamanTable
                             ->send();
                     }),
 
-                // AKSI 'DIKEMBALIKAN' DENGAN MODAL HANYA JUMLAH
+                // AKSI 'DIKEMBALIKAN' 
                 Action::make('dikembalikan')
                     ->label('Dikembalikan')
                     ->icon('heroicon-o-arrow-uturn-left')
                     ->color('info')
-                    ->visible(fn ($record) => $record->status === 'disetujui' && $isAdmin)
+                    // Hanya Approver/Maker yang bisa melihat dan status harus 'disetujui'
+                    ->visible(fn ($record) => $record->status === 'disetujui' && $hasAdminRole) 
                     ->modalHeading('Pengembalian Aset')
                     ->modalDescription('Masukkan jumlah unit yang dikembalikan oleh peminjam.')
                     ->fillForm(function ($record) {
@@ -292,13 +297,19 @@ class PengajuanPinjamanTable
                         });
                     }),
 
-                EditAction::make()->visible(fn ($record) => $isAdmin || ($record->status === 'diajukan' && $record->user_id === $currentUserId)),
+                // Aksi Edit (Visibilitas Diperbaiki)
+                EditAction::make()
+                    // Hanya terlihat jika:
+                    // 1. User adalah Admin (Maker/Approver) ATAU
+                    // 2. User adalah Pemohon DAN statusnya masih 'diajukan' atau 'ditolak'
+                    ->visible(fn ($record) => $hasAdminRole || ($record->user_id === $currentUserId && in_array($record->status, ['diajukan', 'ditolak']))),
                 
-                DeleteAction::make()->visible(fn () => $isAdmin),
+                // Aksi Delete
+                DeleteAction::make()->visible(fn () => $hasAdminRole), // Hanya Admin yang bisa Delete
             ])
             ->bulkActions([
                 BulkActionGroup::make([
-                    DeleteBulkAction::make()->visible(fn () => $isAdmin),
+                    DeleteBulkAction::make()->visible(fn () => $hasAdminRole),
                 ]),
             ]);
     }

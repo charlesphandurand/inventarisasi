@@ -62,7 +62,7 @@ class PengajuanPinjamanResource extends Resource
         $query = parent::getEloquentQuery();
         
         // Jika user bukan admin, hanya tampilkan pengajuan miliknya sendiri
-        if (!Auth::user()->hasAnyRole(['approver'])) {
+        if (!Auth::user()->hasAnyRole(['maker', 'approver'])) {
             $query->where('user_id', Auth::id());
         }
         
@@ -78,7 +78,7 @@ class PengajuanPinjamanResource extends Resource
     {
         $user = auth()->user();
         // Admin bisa lihat semua, user hanya lihat miliknya sendiri
-        return $user->can('view pengajuan') && ($user->hasAnyRole(['approver']) || $record->user_id === $user->id);
+        return $user->can('view pengajuan') && ($user->hasAnyRole(['maker', 'approver']) || $record->user_id === $user->id);
     }
 
     public static function canCreate(): bool
@@ -90,12 +90,12 @@ class PengajuanPinjamanResource extends Resource
     {
         $user = auth()->user();
         // Admin bisa edit semua, user hanya edit miliknya sendiri
-        return $user->can('edit pengajuan') && ($user->hasAnyRole(['approver']) || $record->user_id === $user->id);
+        return $user->can('edit pengajuan') && ($user->hasAnyRole(['maker', 'approver']) || $record->user_id === $user->id);
     }
     
     public static function canDelete(Model $record): bool
     {
         // Hanya admin yang bisa delete
-        return auth()->user()->hasAnyRole(['approver']) && auth()->user()->can('delete pengajuan');
+        return auth()->user()->hasAnyRole(['maker', 'approver']) && auth()->user()->can('delete pengajuan');
     }
 }

@@ -16,10 +16,10 @@ class TotalAsetWidget extends BaseWidget
     protected int | string | array $columnSpan = 'full';
 
     // --- LOGIKA PEMBATASAN AKSES ---
-    // Hanya tampilkan widget ini jika pengguna adalah 'admin' ATAU 'approver'
+    // Hanya tampilkan widget ini jika pengguna adalah 'maker' ATAU 'approver'
     public static function canView(): bool
     {
-        return auth()->user()->hasRole('admin') || auth()->user()->hasRole('approver');
+        return auth()->user()->hasRole('maker') || auth()->user()->hasRole('approver') || auth()->user()->hasRole('user');
     }
 
     protected function getStats(): array

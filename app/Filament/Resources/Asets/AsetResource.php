@@ -142,18 +142,18 @@ class AsetResource extends Resource
     public static function canCreate(): bool
     {
         $user = Auth::user();
-        return $user->hasAnyRole(['admin', 'approver']) && $user->can('create asets');
+        return $user->hasAnyRole(['maker', 'approver']) && $user->can('create asets');
     }
 
     public static function canEdit(Model $record): bool
     {
         $user = Auth::user();
-        return $user->hasAnyRole(['admin', 'approver']) && $user->can('edit asets');
+        return $user->hasAnyRole(['maker', 'approver']) && $user->can('edit asets');
     }
 
     public static function canDelete(Model $record): bool
     {
         $user = Auth::user();
-        return $user->hasAnyRole(['admin', 'approver']) && $user->can('delete asets');
+        return $user->hasAnyRole(['maker', 'approver']) && $user->can('delete asets');
     }
 }

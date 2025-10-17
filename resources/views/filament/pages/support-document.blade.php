@@ -21,7 +21,7 @@
 				@if($url)
 					<x-filament::button tag="a" href="{{ $url }}" target="_blank" color="success" icon="heroicon-m-arrow-down-tray" size="sm">Unduh PDF</x-filament::button>
 				@endif
-				@if(auth()->user()?->hasRole('admin'))
+				@if(auth()->user()?->hasAnyRole(['maker', 'approver']))
 					<x-filament::button wire:click="deleteFile" color="danger" icon="heroicon-m-trash" size="sm">Hapus</x-filament::button>
 				@endif
 			</div>

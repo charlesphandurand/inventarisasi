@@ -45,7 +45,7 @@ class PengajuanPinjamanForm
                         'dikembalikan' => 'Dikembalikan',
                     ])
                     ->default('diajukan')
-                    ->visible(fn ($livewire) => $livewire instanceof EditRecord && Auth::user()?->hasAnyRole(['approver']))
+                    ->visible(fn ($livewire) => $livewire instanceof EditRecord && Auth::user()?->hasAnyRole(['maker', 'approver']))
                     ->required()
                     ->afterStateUpdated(function ($state, callable $set, Get $get) {
                         if ($state === 'disetujui') {

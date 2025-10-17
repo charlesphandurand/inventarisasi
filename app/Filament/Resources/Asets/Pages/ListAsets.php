@@ -14,7 +14,7 @@ class ListAsets extends ListRecords
 
     protected function getHeaderActions(): array
     {
-        $isAdmin = Auth::user()->hasAnyRole(['admin', 'approver']);
+        $isAdmin = Auth::user()->hasAnyRole(['maker', 'approver']);
 
         return [
             CreateAction::make()->visible(fn () => $isAdmin),

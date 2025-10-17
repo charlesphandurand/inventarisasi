@@ -12,9 +12,8 @@ return new class extends Migration
      */
     public function up(): void
     {
-        // PERBAIKAN TOTAL: Menambahkan 'dikeluarkan' ke daftar ENUM.
-        // Ini memastikan semua status yang digunakan di aplikasi sudah valid di database.
-        DB::statement("ALTER TABLE pengajuan_pinjaman MODIFY COLUMN status ENUM('diajukan', 'disetujui', 'ditolak', 'dikembalikan', 'dikeluarkan') DEFAULT 'diajukan'");
+        // PERBAIKAN: Menambahkan 'diverifikasi' ke daftar ENUM untuk mendukung alur Maker -> Approver.
+        DB::statement("ALTER TABLE pengajuan_pinjaman MODIFY COLUMN status ENUM('diajukan', 'diverifikasi', 'disetujui', 'ditolak', 'dikembalikan', 'dikeluarkan') DEFAULT 'diajukan'");
     }
 
     /**
@@ -22,7 +21,7 @@ return new class extends Migration
      */
     public function down(): void
     {
-        // Mengembalikan ENUM ke daftar sebelum penambahan ini
-        DB::statement("ALTER TABLE pengajuan_pinjaman MODIFY COLUMN status ENUM('diajukan', 'disetujui', 'ditolak', 'dikembalikan') DEFAULT 'diajukan'");
+        // Mengembalikan ENUM ke daftar sebelum penambahan 'diverifikasi'
+        DB::statement("ALTER TABLE pengajuan_pinjaman MODIFY COLUMN status ENUM('diajukan', 'disetujui', 'ditolak', 'dikembalikan', 'dikeluarkan') DEFAULT 'diajukan'");
     }
 };

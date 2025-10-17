@@ -17,7 +17,7 @@ class EditPengajuanPinjaman extends EditRecord
 
     protected function getHeaderActions(): array
     {
-        $isAdmin = Auth::user()->hasAnyRole(['approver']);
+        $isAdmin = Auth::user()->hasAnyRole(['maker', 'approver']);
         
         return [
             // Hanya admin yang bisa delete

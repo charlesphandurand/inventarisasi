@@ -17,7 +17,9 @@ class ViewAset extends ViewRecord
     protected function getHeaderActions(): array
     {
         return [
-            Actions\EditAction::make(),
+            Actions\EditAction::make()
+                ->visible(fn () => auth()->user()->hasAnyRole(['maker', 'approver'])),
+            // Tambahkan Actions lain di sini jika ada
         ];
     }
 }

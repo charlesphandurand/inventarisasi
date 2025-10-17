@@ -45,24 +45,24 @@ class SupportDocument extends Page implements HasForms
 		if (Storage::disk('public')->exists('support/info.txt')) {
 			$this->infoText = trim(Storage::disk('public')->get('support/info.txt'));
 		} else {
-			$this->infoText = 'Kontak admin +62859035252';
+			$this->infoText = 'Kontak maker +62859035252';
 		}
 	}
 
 	protected function getFormSchema(): array
 	{
 		return [
-			// Info yang bisa diedit admin (disimpan via tombol)
+			// Info yang bisa diedit maker (disimpan via tombol)
 			Forms\Components\Textarea::make('info_text')
 				->rows(3)
 				->maxLength(500)
 				->default(fn () => $this->infoText)
-				->visible(fn () => Auth::user()?->hasAnyRole(['admin', 'approver']) ?? false),
+				->visible(fn () => Auth::user()?->hasAnyRole(['maker', 'approver']) ?? false),
 			Forms\Components\Placeholder::make('save_info_btn')
 				->label('')
 				->hiddenLabel()
 				->content(fn () => new HtmlString(view('filament.components.support-info-save')->render()))
-				->visible(fn () => Auth::user()?->hasAnyRole(['admin', 'approver']) ?? false),
+				->visible(fn () => Auth::user()?->hasAnyRole(['maker', 'approver']) ?? false),
 			Forms\Components\FileUpload::make('file')
 				->label('Upload PDF Bantuan')
 				->acceptedFileTypes(['application/pdf'])
@@ -73,7 +73,7 @@ class SupportDocument extends Page implements HasForms
 				->visibility('public')
 				->maxSize(5120)
 				->helperText('Ukuran maksimal 5MB')
-				->visible(fn () => Auth::user()?->hasAnyRole(['admin', 'approver']) ?? false)
+				->visible(fn () => Auth::user()?->hasAnyRole(['maker', 'approver']) ?? false)
 				->saveUploadedFileUsing(function ($file) {
 					if ($file instanceof \Livewire\Features\SupportFileUploads\TemporaryUploadedFile || $file instanceof \Livewire\TemporaryUploadedFile) {
 						$filename = $file->getClientOriginalName();
@@ -113,7 +113,7 @@ class SupportDocument extends Page implements HasForms
 
 	public function deleteFile(): void
 	{
-		if (!Auth::user()?->hasAnyRole(['admin', 'approver'])) {
+		if (!Auth::user()?->hasAnyRole(['maker', 'approver'])) {
 			return;
 		}
 		$file = $this->form->getState()['file'] ?? null;
@@ -126,7 +126,7 @@ class SupportDocument extends Page implements HasForms
 
 	public function saveInfo(): void
 	{
-		if (!Auth::user()?->hasAnyRole(['admin', 'approver'])) {
+		if (!Auth::user()?->hasAnyRole(['maker', 'approver'])) {
 			return;
 		}
 		$state = $this->form->getState();

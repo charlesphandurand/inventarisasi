@@ -45,7 +45,7 @@ class RiwayatAsetsTable
     public static function configure(Table $table): Table
     {
         // Pengecekan Izin
-        $isAdminOrApprover = Auth::user() && Auth::user()->hasAnyRole(['admin', 'approver']);
+        $isMakerOrApprover = Auth::user() && Auth::user()->hasAnyRole(['maker', 'approver']);
 
         // --- DEFINISI KOLOM EKSPOR UNTUK CUSTOM SELECTOR ---
         $exportColumns = [
@@ -221,7 +221,6 @@ class RiwayatAsetsTable
                         ->label('Ekspor Data Terpilih (Pilih Format)')
                         ->color('primary') // Warna netral
                         ->icon('heroicon-o-arrow-down-tray')
-                        ->visible(fn () => $isAdminOrApprover)
                         ->form($exportFormSchemaTerpadu) // Menggunakan skema form terpadu
                         ->action(function (Collection $records, array $data) use ($formatTipe, $exportColumns, $formatStokView, $formatRupiahView, $formatKeterangan) { 
                             if ($records->isEmpty()) {

@@ -57,8 +57,7 @@ class LowStockWidget extends BaseWidget
             });
         });
 
-        // Terapkan filter lokasi user jika bukan Admin/Approver (Existing logic)
-        if ($user && !($user->hasRole('admin') || $user->hasRole('approver'))) {
+        if ($user && !($user->hasRole('maker') || $user->hasRole('approver') || $user->hasRole('user'))) {
             $query->where('lokasi', $user->lokasi ?? 'tidak-terdefenisi');
         }
 
@@ -96,9 +95,9 @@ class LowStockWidget extends BaseWidget
                 $daysRemaining = $daysDifference;
 
                 $statusText = $daysRemaining < 0 
-                             ? "Sudah Kadaluarsa (-" . abs($daysRemaining) . " hari)" 
-                             : "Mendekati Kadaluarsa (" . $daysRemaining . " hari)";
-                             
+                              ? "Sudah Kadaluarsa (-" . abs($daysRemaining) . " hari)" 
+                              : "Mendekati Kadaluarsa (" . $daysRemaining . " hari)";
+                              
                 $reasons[] = $statusText;
             }
         }
@@ -110,7 +109,8 @@ class LowStockWidget extends BaseWidget
     public function table(Table $table): Table
     {
         $user = Auth::user();
-        $isAdminOrApprover = $user && ($user->hasRole('admin') || $user->hasRole('approver'));
+        // Variabel ini tidak lagi digunakan untuk pembatasan visibility, tetapi tetap bisa digunakan untuk logika lain
+        $ismakerOrApprover = $user && $user->hasAnyRole(['maker', 'approver']); 
         $query = $this->getTableQuery();
         
         return $table
@@ -128,19 +128,16 @@ class LowStockWidget extends BaseWidget
                 TextColumn::make('lokasi')
                     ->label('LOKASI')
                     ->searchable()
-                    ->sortable()
-                    ->visible($isAdminOrApprover),
+                    ->sortable(),
                 TextColumn::make('expired_date') 
                     ->label('TGL KADALUARSA')
                     ->date('d/m/Y')
-                    ->sortable()
-                    // Kolom ini wajib terlihat untuk Admin/Approver karena digunakan untuk menentukan alasan tampil
-                    ->visible($isAdminOrApprover),
+                    ->sortable(),
+                    // Kolom ini wajib terlihat karena digunakan untuk menentukan alasan tampil
                 TextColumn::make('kondisi_barang')
                     ->label('KONDISI')
                     ->searchable()
                     ->sortable()
-                    ->visible($isAdminOrApprover)
                     ->badge()
                     ->color(fn (string $state): string => match (strtolower($state)) {
                         'baik' => 'success',
@@ -161,14 +158,6 @@ class LowStockWidget extends BaseWidget
                     }),
             ])
             ->filters([
-                // Filter is_atk (Tipe Aset) dinonaktifkan karena is_atk = 1 sudah wajib di query
-                // SelectFilter::make('is_atk')
-                //     ->label('Tipe Aset')
-                //     ->options([
-                //         1 => 'ATK (Alat Tulis Kantor)',
-                //         0 => 'Non-ATK',
-                //     ])
-                //     ->visible($isAdminOrApprover),
                 SelectFilter::make('lokasi')
                     ->options(
                         Aset::query()
@@ -177,16 +166,14 @@ class LowStockWidget extends BaseWidget
                             // Tambahkan where is_atk = 1 di sini jika filter ini perlu merefleksikan hanya lokasi ATK
                             ->where('is_atk', 1) 
                             ->pluck('lokasi', 'lokasi')
-                    )
-                    ->visible($isAdminOrApprover),
+                    ),
                 SelectFilter::make('kondisi_barang')
                     ->label('Kondisi Barang')
                     ->options([
                         'baik' => 'Baik',
                         'rusak' => 'Rusak',
                         'sedang' => 'Sedang',
-                    ])
-                    ->visible($isAdminOrApprover),
+                    ]),
             ])
             ->headerActions([
                 // ACTION EXCEL
@@ -208,15 +195,17 @@ class LowStockWidget extends BaseWidget
                                     ->formatStateUsing(fn ($state) => $state ? Carbon::parse($state)->format('d/m/Y') : '-'), 
                                 Column::make('kondisi_barang')->heading('KONDISI BARANG'), 
                             ]),
-                    ])
-                    ->visible(fn () => $isAdminOrApprover),
+                    ]),
+                    // VISIBILITY DIHAPUS, SEHINGGA SIAPAPUN YANG LOGIN BISA MELIHAT DAN MENGGUNAKANNYA.
+                    // ->visible(fn () => $ismakerOrApprover), 
 
                 // ACTION PDF (PERBAIKAN FUNGSI getAlertReasons DILEWATKAN)
                 Action::make('export_pdf')
                     ->label('Ekspor PDF')
                     ->color('danger')
                     ->icon('heroicon-o-document-arrow-down')
-                    ->visible(fn () => $isAdminOrApprover)
+                    // VISIBILITY DIHAPUS, SEHINGGA SIAPAPUN YANG LOGIN BISA MELIHAT DAN MENGGUNAKANNYA.
+                    // ->visible(fn () => $ismakerOrApprover)
                     ->action(function () use ($query) {
                         try {
                             // Ambil data

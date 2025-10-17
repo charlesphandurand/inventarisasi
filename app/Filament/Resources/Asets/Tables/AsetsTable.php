@@ -87,9 +87,7 @@ class AsetsTable
 
     public static function configure(Table $table): Table
     {
-        // Asumsi ini adalah Filament v2 atau v3
-        $isAdmin = Auth::user()->hasAnyRole(['admin']);
-        $isAdminOrApprover = Auth::user()->hasAnyRole(['admin', 'approver']);
+        $isMakerOrApprover = Auth::user()->hasAnyRole(['maker', 'approver']);
 
         return $table
             ->heading('Manajemen Data Aset')
@@ -188,15 +186,13 @@ class AsetsTable
                                 Column::make('keterangan')->heading('KETERANGAN'),
                                 Column::make('created_at')->heading('TANGGAL DIBUAT'),
                             ]),
-                    ])
-                    ->visible(fn () => $isAdminOrApprover),
+                        ]),
 
                 // Export PDF (Data Tabular Saja)
                 Action::make('export_pdf')
                     ->label('Ekspor PDF (ALL)')
                     ->color('danger')
                     ->icon('heroicon-o-document-arrow-down')
-                    ->visible(fn () => $isAdminOrApprover)
                     ->action(function (Table $table) {
                         $query = $table->getLivewire()->getFilteredTableQuery();
 
@@ -235,9 +231,8 @@ class AsetsTable
             ])
             ->recordActions([
                 ViewAction::make(),
-                // PERBAIKAN: Mengganti $isAdmin dengan $isAdminOrApprover
-                // Ini akan memungkinkan pengguna dengan peran 'admin' ATAU 'approver' untuk melihat dan menggunakan tombol Edit.
-                EditAction::make()->visible(fn () => $isAdminOrApprover), 
+                // Ini akan memungkinkan pengguna dengan peran 'maker' ATAU 'approver' untuk melihat dan menggunakan tombol Edit.
+                EditAction::make()->visible(fn () => $isMakerOrApprover), 
 
                 // Aksi Cetak QR Satuan dan tampilkan modal QR Dihapus!
 
@@ -308,8 +303,11 @@ class AsetsTable
             ->bulkActions([
                 // Membungkus Bulk Actions agar tombolnya terlihat
                 BulkActionGroup::make([
-                    DeleteBulkAction::make(),
-                    // NEW: Aksi Ekspor PDF (Data + QR Code) - Dijaga karena ini yang fungsional
+                    // 1. DELETE BULK ACTION: Dibatasi hanya untuk Maker atau Approver
+                    DeleteBulkAction::make()
+                        ->visible(fn () => auth()->user()->hasAnyRole(['maker', 'approver'])), // Batasan Role Baru
+            
+                    // 2. EXPORT PDF: Tetap bisa diakses, tapi juga dibatasi hanya untuk Maker atau Approver
                     BulkAction::make('export_data_with_qr_pdf')
                         ->label('Ekspor PDF (Data + QR Code)')
                         ->icon('heroicon-o-document-check')
@@ -319,18 +317,18 @@ class AsetsTable
                                 Notification::make()->warning()->title('Pilih Aset')->body('Harap pilih minimal satu aset untuk diekspor.')->send();
                                 return;
                             }
-
+            
                             // Hapus record yang tidak memiliki QR Code
                             $records = $records->filter(fn ($record) => !empty($record->qr_code));
-
+            
                             if ($records->isEmpty()) {
                                 Notification::make()->warning()->title('Gagal Ekspor')->body('Semua aset yang dipilih tidak memiliki QR Code yang tersedia.')->send();
                                 return;
                             }
-
+            
                             $filename = 'Laporan_Aset_QR_Batch_' . now()->format('Ymd_His') . '.pdf';
                             $path = storage_path('app/public/' . $filename);
-
+            
                             try {
                                 Pdf::view('exports.aset_qr_batch_pdf', [ // MENGGUNAKAN VIEW BARU
                                     'data' => $records,
@@ -342,9 +340,9 @@ class AsetsTable
                                 ->format(Format::A4)
                                 ->landscape()
                                 ->save($path);
-
+            
                                 return Response::download($path, $filename)->deleteFileAfterSend(true);
-
+            
                             } catch (\Exception $e) {
                                 Log::error('PDF QR Export Error: ' . $e->getMessage(), ['exception' => $e]);
                                 Notification::make()
@@ -356,7 +354,8 @@ class AsetsTable
                                 return null;
                             }
                         })
-                        ->visible(fn () => $isAdminOrApprover) // Batasi juga BulkAction ini
+                        // Batasan Role Baru (Menggantikan $isMakerOrApprover)
+                        // ->visible(fn () => auth()->user()->hasAnyRole(['maker', 'approver'])) 
                         ->deselectRecordsAfterCompletion(),
                 ])
             ]);

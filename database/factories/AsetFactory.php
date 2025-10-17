@@ -39,12 +39,29 @@ class AsetFactory extends Factory
         // Tentukan apakah ini ATK atau bukan secara acak
         $isAtk = $this->faker->boolean(40); // 40% chance of being ATK
         $kondisiList = ['Baik', 'Kurang Baik', 'Rusak'];
+        
+        // Daftar nama barang ATK yang lebih spesifik untuk simulasi data
+        $atkItems = [
+            'Pulpen Gel Hitam', 'Kertas HVS A4 80gr', 'Stapler Besar', 
+            'Map Plastik Biru', 'Binder Clip Kecil', 'Post-it Kuning',
+            'Tinta Printer Canon 810', 'Penghapus Karet', 'Penggaris Besi 30cm',
+        ];
+        
+        // --- LOGIKA PERBAIKAN UNTUK MENGHINDARI OverflowException ---
+        $namaBarang = $isAtk 
+            // FIX: Hapus unique() pada randomElement($atkItems) karena daftar terbatas.
+            // Kombinasi $atkItems (tidak unik) + unique()->randomNumber(3) (unik) akan menghasilkan nama yang unik.
+            ? $this->faker->randomElement($atkItems) . ' ' . $this->faker->unique()->randomNumber(3) 
+            // Untuk non-ATK, biarkan unique()->words(4, true) karena pool katanya sangat besar.
+            : $this->faker->unique()->words(4, true); 
 
         return [
-            'nama_barang' => $this->faker->word(),
+            // Pastikan nama barang selalu unik
+            'nama_barang' => $namaBarang, 
             'jumlah_barang' => $this->faker->numberBetween(1, 100),
             'lokasi' => $this->faker->randomElement($lokasiList),
-            'keterangan' => $this->faker->sentence(),
+            // Pastikan keterangan selalu unik
+            'keterangan' => $this->faker->unique()->sentence(6, true), 
             'nama_vendor' => $this->faker->randomElement($vendorList),
             'harga' => $this->faker->numberBetween(100000, 10000000),
             

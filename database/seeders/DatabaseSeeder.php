@@ -18,162 +18,149 @@ class DatabaseSeeder extends Seeder
         // Reset cached roles and permissions
         app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
 
-        // 1. Buat permission yang diperlukan
+        // Daftar Unit Kerja untuk User
+        $unitKerja = [
+            'Tim KPKWP', 
+            'Tim SP & PUR', 
+            'Tim FDSEK', 
+            'Tim FPPUKIS', 
+            'Tim Kehumasan', 
+            'Tim MI'
+        ];
+
+        // 1. Buat permission yang diperlukan (SAMA SEPERTI SEBELUMNYA)
         $permissions = [
-            // User management
-            'view users',
-            'create users', 
-            'edit users',
-            'delete users',
+            // User management (Maker & Approver)
+            'view users', 'create users', 'edit users', 'delete users',
             
-            // Aset management
-            'view asets',
-            'create asets',
-            'edit asets', 
-            'delete asets',
+            // Aset/Barang management (Maker & Approver)
+            'view asets', 'create asets', 'edit asets', 'delete asets',
             
-            // Pengajuan management
-            'view pengajuan',
-            'create pengajuan',
-            'edit pengajuan',
-            'delete pengajuan',
+            // Pengajuan (User, Maker, Approver)
+            'view pengajuan',      // Termasuk Riwayat Aset, Pengajuan Barang
+            'create pengajuan',    // Untuk Pinjaman, Pengembalian, Permintaan ATK
+            'edit pengajuan',      // Edit/batalkan pengajuan sendiri (User/Maker)
+            'delete pengajuan',    // Hapus pengajuan sendiri (User/Maker)
+            
+            // Approval (Approver only)
             'approve pengajuan',
-            'reject pengajuan'
+            'reject pengajuan',
+
+            // Laporan & Cetak (Maker & Approver)
+            'view reports',
+            'print qr'
         ];
 
         foreach ($permissions as $permission) {
             Permission::firstOrCreate(['name' => $permission]);
         }
 
-        // 2. Buat role 'admin' dan 'user'
-        $adminRole = Role::firstOrCreate(['name' => 'admin']);
-        $userRole = Role::firstOrCreate(['name' => 'user']);
-        $approverRole = Role::firstOrCreate(['name' => 'approver']);
+        // 2. Buat role: 'approver', 'maker', dan 'user'
+        $approverRole = Role::firstOrCreate(['name' => 'approver']); 
+        $makerRole = Role::firstOrCreate(['name' => 'maker']);      
+        $userRole = Role::firstOrCreate(['name' => 'user']);        
 
+        // 3. Berikan Permission ke ROLE (SAMA SEPERTI SEBELUMNYA)
+        
+        // Approver: Full Akses
+        $approverRole->givePermissionTo(Permission::all());
 
-        // 3. Berikan semua permission kepada admin
-        $adminRole->givePermissionTo($permissions);
-
-        $approverRole->givePermissionTo([
-            // Aset management
-            'view asets',
-            'create asets',
-            'edit asets', 
-            'delete asets',
-            
-            'view pengajuan',
-            'create pengajuan',
-            'edit pengajuan',
-            'delete pengajuan',
-            'approve pengajuan',
-            'reject pengajuan'
+        // Maker: Semua kecuali approve/reject pengajuan
+        $makerPermissions = array_diff($permissions, [
+            'approve pengajuan', 
+            'reject pengajuan',
         ]);
-
-        // 4. Berikan permission terbatas kepada user
+        $makerRole->givePermissionTo($makerPermissions);
+        
+        // User: Hanya bisa lihat aset, dan mengelola pengajuan/permintaan sendiri
         $userRole->givePermissionTo([
             'view asets',
             'view pengajuan',
             'create pengajuan',
             'edit pengajuan',
-            'delete pengajuan'
+            'delete pengajuan',
         ]);
+        
 
-        // 5. Buat user 'admin' atau pastikan sudah ada
-        $adminUser = User::where('email', 'admin@gmail.com')->first();
-        if (!$adminUser) {
-            $adminUser = User::create([
-                'name' => 'Administrator',
-                'email' => 'admin@gmail.com',
-                'password' => Hash::make('admin123'),
-            ]);
-        } else {
-            // Update password admin jika sudah ada
-            $adminUser->update([
-                'password' => Hash::make('admin123'),
-            ]);
-        }
-        $adminUser->assignRole('admin');
-
-        // 6. Buat beberapa user testing dengan password "1"
-        $testUsers = [
+        // 4. Buat user 'approver' dan 'maker'
+        $approverUser = User::firstOrCreate(
+            ['email' => 'approver@gmail.com'],
             [
-                'name' => 'Test User 1',
-                'email' => 'user1@test.com',
-                'password' => '1',
-                'role' => 'user'
-            ],
-            [
-                'name' => 'Test User 2', 
-                'email' => 'user2@test.com',
-                'password' => '1',
-                'role' => 'approver'
-            ],
-            [
-                'name' => 'Test Admin',
-                'email' => 'admin2@test.com', 
-                'password' => 'admin123',
-                'role' => 'admin'
+                'name' => 'Approver MI',
+                // 'lokasi' kolom dihapus
+                'password' => Hash::make('1'),
             ]
-        ];
+        );
+        $approverUser->assignRole('approver');
 
-        foreach ($testUsers as $userData) {
-            $user = User::where('email', $userData['email'])->first();
-            if (!$user) {
-                $user = User::create([
-                    'name' => $userData['name'],
-                    'email' => $userData['email'],
-                    'password' => Hash::make($userData['password']),
-                ]);
-            } else {
-                // Update password user yang sudah ada
-                $user->update([
-                    'password' => Hash::make($userData['password']),
-                ]);
-            }
+        $makerUser = User::firstOrCreate(
+            ['email' => 'maker@gmail.com'],
+            [
+                'name' => 'Maker MI',
+                // 'lokasi' kolom dihapus
+                'password' => Hash::make('1'),
+            ]
+        );
+        $makerUser->assignRole('maker');
+
+        // 5. Buat user testing untuk setiap unit kerja (Role 'user')
+        $testUsers = [];
+        foreach ($unitKerja as $unit) {
+            $email = strtolower(str_replace([' ', '&'], ['', '_'], $unit)) . "@unit.com";
             
-            // Assign role
-            $user->assignRole($userData['role']);
-        }
-
-        // 7. Buat beberapa user factory dengan password "1"
-        $regularUsers = User::factory()->count(5)->create();
-        foreach ($regularUsers as $user) {
+            $user = User::firstOrCreate(
+                ['email' => $email],
+                [
+                    'name' => 'User ' . $unit,
+                    // 'lokasi' kolom dihapus
+                    'password' => Hash::make('1'),
+                ]
+            );
             $user->assignRole('user');
+            $testUsers[] = $user;
         }
+        
+        // Gabungkan semua user untuk factory pengajuan
+        $allUsers = collect([$makerUser, $approverUser])->merge($testUsers);
 
-        // 8. Buat data aset dengan factory.
-        // Pastikan AsetFactory.php sudah diperbarui untuk mengisi kolom 'nama_vendor' dan 'harga'.
+        // 6. Buat 100 data aset dengan factory
         Aset::factory()->count(100)->create();
+        $this->command->info('100 data Aset berhasil dibuat.');
+        
+        // 7. Buat 20 data pengajuan pinjaman secara acak
+        $asetList = Aset::all();
 
-        // 9. Buat 20 data pengajuan pinjaman secara acak
         for ($i = 0; $i < 20; $i++) {
-            $aset = Aset::inRandomOrder()->first();
-            $statuses = ['diajukan', 'disetujui', 'ditolak'];
-            $status = $statuses[array_rand($statuses)];
+            $aset = $asetList->random();
+            $userPeminjam = $allUsers->random();
 
-            $adminId = null;
-            $tanggalApproval = null;
-
-            if ($status === 'disetujui') {
-                $adminId = $adminUser->id;
-                $tanggalApproval = Carbon::now()->subDays(rand(1, 10));
-            }
+            // KARENA 'maker_id' dan 'tanggal_approval' tidak ada di tabel, 
+            // semua data dummy diatur ke status 'diajukan'
+            $status = 'diajukan'; 
 
             PengajuanPinjaman::create([
                 'aset_id' => $aset->id,
-                'user_id' => $regularUsers->random()->id,
-                'jumlah_pinjam' => rand(1, $aset->jumlah_barang),
-                'admin_id' => $adminId,
+                'user_id' => $userPeminjam->id,
+                'jumlah_pinjam' => rand(1, min(5, $aset->jumlah_barang)), 
                 'status' => $status,
+                // 'maker_id', 'tanggal_approval' dihapus dari insert
             ]);
         }
+        $this->command->info('20 data Pengajuan Pinjaman berhasil dibuat.');
 
+
+        $this->command->info('------------------------------------');
         $this->command->info('Database berhasil di-seed!');
         $this->command->info('Role dan Permission berhasil dibuat!');
-        $this->command->info('Admin: admin@gmail.com / admin123');
-        $this->command->info('User 1: user1@test.com / 1');
-        $this->command->info('User 2: user2@test.com / 1');
-        $this->command->info('Admin 2: admin2@test.com / admin123');
-        $this->command->info('User Factory: password = 1 (5 user)');
+        $this->command->info('------------------------------------');
+        $this->command->info('AKUN UTAMA (Password semua: 1):');
+        $this->command->info('- Approver: approver@gmail.com (Role: approver)');
+        $this->command->info('- Maker: maker@gmail.com (Role: maker)');
+        $this->command->info('------------------------------------');
+        $this->command->info('AKUN USER UNIT KERJA (Password semua: 1):');
+        foreach ($unitKerja as $unit) {
+            $email = strtolower(str_replace([' ', '&'], ['', '_'], $unit)) . "@unit.com";
+            $this->command->info('- User ' . $unit . ': ' . $email);
+        }
     }
 }
