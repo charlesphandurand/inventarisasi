@@ -17,6 +17,10 @@ use Filament\Tables\Table;
 use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
 
+// --- Filament Forms Components ---
+use Filament\Forms\Components\Select; // <--- PASTIKAN INI ADA
+use Filament\Forms\Components\Fieldset; // Opsi
+
 // --- Laravel & Database ---
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Database\Eloquent\Builder;
@@ -71,8 +75,6 @@ class AsetsTable
 
     /**
      * Fungsi pembantu untuk membuat QR Code SVG.
-     * Fungsi ini DIJAGA karena masih digunakan oleh aksi BulkAction 'export_data_with_qr_pdf'
-     * melalui pemanggilan di Blade view.
      */
     public static function generateQrCodeSvg(string $data, int $size = 150): HtmlString
     {
@@ -92,8 +94,7 @@ class AsetsTable
         return $table
             ->heading('Manajemen Data Aset')
             ->columns([
-
-                // KOLOM 1: Kondisi Barang
+                // ... Kolom-kolom lainnya ...
                 TextColumn::make('kondisi_barang')
                     ->label('Kondisi')
                     ->badge()
@@ -107,7 +108,6 @@ class AsetsTable
                     ->searchable()
                     ->formatStateUsing(fn ($state) => strtoupper($state)),
 
-                // KOLOM 2: Status ATK
                 TextColumn::make('is_atk')
                     ->label('ATK')
                     ->badge()
@@ -115,19 +115,11 @@ class AsetsTable
                     ->color(fn (bool $state): string => $state ? 'success' : 'warning')
                     ->sortable(),
 
-                // KOLOM 3: expired_date
                 TextColumn::make('expired_date')
                     ->label('Expired Date')
                     ->date('d/m/Y')
                     ->sortable()
                     ->placeholder('-'),
-
-                // KOLOM QR CODE (Data)
-                IconColumn::make('qr_status')
-                    ->label('QR Status')
-                    ->icon(fn (Aset $record): string => empty($record->qr_code) ? 'heroicon-o-x-circle' : 'heroicon-o-check-circle')
-                    ->color(fn (Aset $record): string => empty($record->qr_code) ? 'danger' : 'success')
-                    ->tooltip(fn (Aset $record): string => empty($record->qr_code) ? 'QR Belum Dibuat' : 'QR Tersedia'),
 
                 TextColumn::make('nama_barang')
                     ->sortable()
@@ -164,7 +156,7 @@ class AsetsTable
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->headerActions([
-                // Export Excel
+                // ... Header Actions lainnya (Export Excel & Export PDF ALL) ...
                 ExportAction::make('lanjutan_custom')
                     ->label('Ekspor (XLSX/CSV)')
                     ->color('success')
@@ -186,9 +178,8 @@ class AsetsTable
                                 Column::make('keterangan')->heading('KETERANGAN'),
                                 Column::make('created_at')->heading('TANGGAL DIBUAT'),
                             ]),
-                        ]),
+                    ]),
 
-                // Export PDF (Data Tabular Saja)
                 Action::make('export_pdf')
                     ->label('Ekspor PDF (ALL)')
                     ->color('danger')
@@ -231,14 +222,10 @@ class AsetsTable
             ])
             ->recordActions([
                 ViewAction::make(),
-                // Ini akan memungkinkan pengguna dengan peran 'maker' ATAU 'approver' untuk melihat dan menggunakan tombol Edit.
                 EditAction::make()->visible(fn () => $isMakerOrApprover), 
-
-                // Aksi Cetak QR Satuan dan tampilkan modal QR Dihapus!
-
             ])
             ->filters([
-                // Filter 1: Kondisi Barang
+                // ... Filters lainnya ...
                 SelectFilter::make('kondisi_barang')
                     ->label('Filter Kondisi')
                     ->options([
@@ -247,7 +234,6 @@ class AsetsTable
                         'Rusak' => 'Rusak',
                     ]),
 
-                // Filter 2: Status ATK
                 SelectFilter::make('is_atk')
                     ->label('Filter ATK')
                     ->options([
@@ -262,7 +248,6 @@ class AsetsTable
                         return $query;
                     }),
 
-                // Filter 3: Lokasi
                 Filter::make('lokasi')
                     ->label('Lokasi')
                     ->form([
@@ -281,7 +266,6 @@ class AsetsTable
                             : $query;
                     }),
 
-                // Filter 4: Nama Vendor
                 Filter::make('nama_vendor')
                     ->label('Nama Vendor')
                     ->form([
@@ -305,19 +289,32 @@ class AsetsTable
                 BulkActionGroup::make([
                     // 1. DELETE BULK ACTION: Dibatasi hanya untuk Maker atau Approver
                     DeleteBulkAction::make()
-                        ->visible(fn () => auth()->user()->hasAnyRole(['maker', 'approver'])), // Batasan Role Baru
+                        ->visible(fn () => auth()->user()->hasAnyRole(['maker', 'approver'])), 
             
-                    // 2. EXPORT PDF: Tetap bisa diakses, tapi juga dibatasi hanya untuk Maker atau Approver
+                    // 2. EXPORT PDF: Sekarang dengan custom column!
                     BulkAction::make('export_data_with_qr_pdf')
-                        ->label('Ekspor PDF (Data + QR Code)')
+                        ->label('Ekspor PDF (Data + QR Code Custom)') // Ubah label
                         ->icon('heroicon-o-document-check')
-                        ->color('success') // Ganti warna agar beda dengan tabular PDF
-                        ->action(function (Collection $records) {
+                        ->color('success') 
+                        
+                        // --- FORM CUSTOM COLUMN ---
+                        ->form([
+                            Select::make('columns')
+                                ->label('Pilih Kolom Data yang Ingin Disertakan')
+                                ->options(static::getExportableColumns())
+                                ->multiple()
+                                ->required()
+                                ->default(array_keys(static::getExportableColumns())) // Default pilih semua
+                                ->searchable(),
+                        ])
+                        // --- AKHIR FORM CUSTOM COLUMN ---
+
+                        ->action(function (Collection $records, array $data) { // Menerima $data
                             if ($records->isEmpty()) {
                                 Notification::make()->warning()->title('Pilih Aset')->body('Harap pilih minimal satu aset untuk diekspor.')->send();
                                 return;
                             }
-            
+                            
                             // Hapus record yang tidak memiliki QR Code
                             $records = $records->filter(fn ($record) => !empty($record->qr_code));
             
@@ -325,15 +322,22 @@ class AsetsTable
                                 Notification::make()->warning()->title('Gagal Ekspor')->body('Semua aset yang dipilih tidak memiliki QR Code yang tersedia.')->send();
                                 return;
                             }
+                            
+                            // Ambil kolom yang dipilih dari form data dan filter labelnya
+                            $selectedColumnKeys = $data['columns'];
+                            $exportableColumns = static::getExportableColumns();
+                            
+                            // Ambil hanya Label/Value dari kolom yang dipilih
+                            $finalColumns = array_filter($exportableColumns, fn ($key) => in_array($key, $selectedColumnKeys), ARRAY_FILTER_USE_KEY);
             
                             $filename = 'Laporan_Aset_QR_Batch_' . now()->format('Ymd_His') . '.pdf';
                             $path = storage_path('app/public/' . $filename);
             
                             try {
-                                Pdf::view('exports.aset_qr_batch_pdf', [ // MENGGUNAKAN VIEW BARU
+                                Pdf::view('exports.aset_qr_batch_pdf', [
                                     'data' => $records,
                                     'title' => 'Laporan Aset Terpilih dengan QR Code',
-                                    // Pass callable function untuk digunakan di Blade
+                                    'selectedColumns' => $finalColumns, // <-- Pass kolom yang dipilih
                                     'generateQrCodeSvg' => [self::class, 'generateQrCodeSvg'],
                                     'AsetResource' => AsetResource::class,
                                 ])
@@ -354,8 +358,6 @@ class AsetsTable
                                 return null;
                             }
                         })
-                        // Batasan Role Baru (Menggantikan $isMakerOrApprover)
-                        // ->visible(fn () => auth()->user()->hasAnyRole(['maker', 'approver'])) 
                         ->deselectRecordsAfterCompletion(),
                 ])
             ]);
