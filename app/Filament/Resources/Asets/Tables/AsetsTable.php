@@ -6,20 +6,24 @@ namespace App\Filament\Resources\Asets\Tables;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
-use Filament\Actions\Action; // <-- Digunakan untuk Header, Record, DAN Column Actions
+use Filament\Actions\Action; // Digunakan untuk Header, Record, DAN Column Actions
 use Filament\Actions\ViewAction;
 use Filament\Actions\BulkAction;
 
 // --- Filament Table Components ---
 use Filament\Tables\Columns\TextColumn;
-use Filament\Tables\Columns\IconColumn; // <-- Tambahan untuk Icon Column
+use Filament\Tables\Columns\IconColumn; 
 use Filament\Tables\Table;
 use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
 
-// --- Filament Forms Components ---
-use Filament\Forms\Components\Select; // <--- PASTIKAN INI ADA
-use Filament\Forms\Components\Fieldset; // Opsi
+// --- Filament Form Components (BARU: WAJIB UNTUK TOGGLE DAN SELECT) ---
+use Filament\Forms\Components\Toggle;
+use Filament\Forms\Components\Select;
+
+// --- Filament Form Utilities (PENTING: Memperbaiki error Set/Get) ---
+use Filament\Schemas\Components\Utilities\Set; 
+use Filament\Schemas\Components\Utilities\Get; 
 
 // --- Laravel & Database ---
 use Illuminate\Support\Facades\Auth;
@@ -45,10 +49,9 @@ use pxlrbt\FilamentExcel\Actions\ExportAction;
 use pxlrbt\FilamentExcel\Exports\ExcelExport;
 use pxlrbt\FilamentExcel\Columns\Column;
 
-// --- IMPORTS UNTUK SPATIE PDF ---
+// --- SPATIE PDF IMPORTS (PASTIKAN SUDAH TERINSTAL) ---
 use Spatie\LaravelPdf\Facades\Pdf;
 use Spatie\LaravelPdf\Enums\Format;
-use Spatie\Browsershot\Browsershot;
 
 class AsetsTable
 {
@@ -59,8 +62,8 @@ class AsetsTable
     {
         // Sesuaikan key (nama atribut Model) dan value (label tampilan) di sini
         return [
-            'kode_aset' => 'Kode Aset',
             'nama_barang' => 'Nama Barang',
+            'id' => 'Kode Aset',
             'kondisi_barang' => 'Kondisi Aset',
             'jumlah_barang' => 'Jumlah',
             'lokasi' => 'Lokasi Penempatan',
@@ -94,7 +97,12 @@ class AsetsTable
         return $table
             ->heading('Manajemen Data Aset')
             ->columns([
-                // ... Kolom-kolom lainnya ...
+                // ... Kolom-kolom lainnya (Pastikan 'id' ada di sini jika diperlukan di tabel) ...
+                TextColumn::make('id')
+                    ->label('Kode Aset')
+                    ->searchable()
+                    ->sortable()
+                    ->formatStateUsing(fn ($state) => strtoupper($state)),
                 TextColumn::make('kondisi_barang')
                     ->label('Kondisi')
                     ->badge()
@@ -287,37 +295,59 @@ class AsetsTable
             ->bulkActions([
                 // Membungkus Bulk Actions agar tombolnya terlihat
                 BulkActionGroup::make([
-                    // 1. DELETE BULK ACTION: Dibatasi hanya untuk Maker atau Approver
+                    // 1. DELETE BULK ACTION
                     DeleteBulkAction::make()
                         ->visible(fn () => auth()->user()->hasAnyRole(['maker', 'approver'])), 
-            
+                
                     // 2. EXPORT PDF: Sekarang dengan custom column!
                     BulkAction::make('export_data_with_qr_pdf')
                         ->label('Ekspor PDF (Data + QR Code Custom)') // Ubah label
                         ->icon('heroicon-o-document-check')
                         ->color('success') 
                         
-                        // --- FORM CUSTOM COLUMN ---
-                        ->form([
-                            Select::make('columns')
-                                ->label('Pilih Kolom Data yang Ingin Disertakan')
-                                ->options(static::getExportableColumns())
-                                ->multiple()
-                                ->required()
-                                ->default(array_keys(static::getExportableColumns())) // Default pilih semua
-                                ->searchable(),
-                        ])
+                        // --- FORM CUSTOM COLUMN (DENGAN TOGGLE BARU) ---
+                        ->form(function () {
+                            // Ambil semua kunci kolom yang dapat diekspor
+                            $allColumnKeys = array_keys(static::getExportableColumns());
+                        
+                            return [
+                                // 1. TOGGLE BARU: Berfungsi sebagai tombol Pilih/Hapus Semua
+                                Toggle::make('toggle_all')
+                                    ->label('Pilih/Hapus Semua Kolom')
+                                    ->default(true) // Default aktif (pilih semua)
+                                    ->live() // Wajib agar perubahan di sini memengaruhi field 'columns'
+                                    
+                                    // PERBAIKAN: Mengganti \Filament\Forms\Set dengan \Filament\Schemas\Components\Utilities\Set
+                                    ->afterStateUpdated(function (bool $state, Set $set) use ($allColumnKeys) {
+                                        // Jika toggle ON, pilih semua kolom. Jika OFF, kosongkan.
+                                        $set('columns', $state ? $allColumnKeys : []);
+                                    })
+                                    ->columnSpanFull(), // Agar toggle tampil di baris penuh
+                                
+                                // 2. SELECT KOMPONEN: Kolom yang dikontrol
+                                Select::make('columns')
+                                    ->label('Pilih Kolom Data yang Ingin Disertakan')
+                                    ->options(static::getExportableColumns())
+                                    ->multiple()
+                                    ->required()
+                                    ->default($allColumnKeys) // Default pilih semua
+                                    ->searchable()
+                                    ->live(), // Wajib agar field dapat diubah oleh 'toggle_all'
+                            ];
+                        })
+                        
                         // --- AKHIR FORM CUSTOM COLUMN ---
 
-                        ->action(function (Collection $records, array $data) { // Menerima $data
+                        ->action(function (Collection $records, array $data) {
                             if ($records->isEmpty()) {
                                 Notification::make()->warning()->title('Pilih Aset')->body('Harap pilih minimal satu aset untuk diekspor.')->send();
                                 return;
                             }
                             
-                            // Hapus record yang tidak memiliki QR Code
+                            // Hapus record yang tidak memiliki QR Code (misalnya qr_code kosong/null)
+                            // Catatan: Asumsi Model Aset memiliki field `qr_code`
                             $records = $records->filter(fn ($record) => !empty($record->qr_code));
-            
+                
                             if ($records->isEmpty()) {
                                 Notification::make()->warning()->title('Gagal Ekspor')->body('Semua aset yang dipilih tidak memiliki QR Code yang tersedia.')->send();
                                 return;
@@ -329,24 +359,30 @@ class AsetsTable
                             
                             // Ambil hanya Label/Value dari kolom yang dipilih
                             $finalColumns = array_filter($exportableColumns, fn ($key) => in_array($key, $selectedColumnKeys), ARRAY_FILTER_USE_KEY);
-            
+                
                             $filename = 'Laporan_Aset_QR_Batch_' . now()->format('Ymd_His') . '.pdf';
                             $path = storage_path('app/public/' . $filename);
-            
+                
                             try {
+                                // Panggil helper function di dalam closure untuk digunakan di Blade
+                                $generateQrCodeSvg = function ($data, $size = 150) {
+                                    return self::generateQrCodeSvg($data, $size);
+                                };
+
                                 Pdf::view('exports.aset_qr_batch_pdf', [
                                     'data' => $records,
                                     'title' => 'Laporan Aset Terpilih dengan QR Code',
                                     'selectedColumns' => $finalColumns, // <-- Pass kolom yang dipilih
-                                    'generateQrCodeSvg' => [self::class, 'generateQrCodeSvg'],
+                                    // Pass callable function untuk digunakan di Blade
+                                    'generateQrCodeSvg' => $generateQrCodeSvg,
                                     'AsetResource' => AsetResource::class,
                                 ])
                                 ->format(Format::A4)
                                 ->landscape()
                                 ->save($path);
-            
+                
                                 return Response::download($path, $filename)->deleteFileAfterSend(true);
-            
+                
                             } catch (\Exception $e) {
                                 Log::error('PDF QR Export Error: ' . $e->getMessage(), ['exception' => $e]);
                                 Notification::make()

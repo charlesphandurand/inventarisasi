@@ -190,7 +190,7 @@
 
     @if ($isLabelFormat)
         {{-- ========================================================= --}}
-        {{-- MODE LABEL / STICKER (Hanya Nama Aset) --}}
+        {{-- MODE LABEL / STICKER (Hanya Nama Aset dan ID) --}}
         {{-- ========================================================= --}}
         <div class="label-grid">
             @forelse ($data as $item)
@@ -204,7 +204,14 @@
                         {!! $qrSvg !!}
                     </div>
                     <div class="label-text">
-                        {{ strtoupper($item->nama_barang) }}
+                        {{-- MENAMPILKAN ID ASET --}}
+                        <div class="label-id" style="font-size: 7pt; font-weight: normal; line-height: 1.1;">
+                            ID: {{ $item->id }}
+                        </div>
+                        {{-- NAMA ASET --}}
+                        <div class="label-name" style="font-size: 7pt; font-weight: bold; line-height: 1.1;">
+                            {{ strtoupper($item->nama_barang) }}
+                        </div>
                     </div>
                 </div>
             @empty
